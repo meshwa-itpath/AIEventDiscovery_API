@@ -1,0 +1,19 @@
+services:
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ALLOW_RESET: "TRUE"
+
+    volumes:
+      - chroma-data:/chroma/chroma
+
+    restart: unless-stopped
+
+volumes:
+  chroma-data:
