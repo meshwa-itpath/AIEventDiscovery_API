@@ -1,7 +1,8 @@
-using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
+using AIEventDiscovery.DTOs;
 using AIEventDiscovery.Services;
 using AIEventDiscovery.Services.Embeddings;
-using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
 
 namespace AIEventDiscovery.Controllers
 {
@@ -18,25 +19,31 @@ namespace AIEventDiscovery.Controllers
             _embeddingService = embeddingService;
         }
 
+        /// <summary>
+        /// Performs a semantic vector search on the 'technical_events' collection.
+        /// </summary>
+        /// <param name="q">The natural-language search query.</param>
+        /// <param name="limit">Number of results to return (default: 5).</param>
         [HttpGet]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> Get(string q, int limit = 5)
         {
             if (string.IsNullOrWhiteSpace(q))
-                return BadRequest("Query parameter 'q' is required.");
+                return BadRequest(ApiResponse<object>.Fail("Query parameter 'q' is required."));
 
-            // 1. Get embedding for the query
             var queryEmbedding = _embeddingService.GenerateEmbedding(q);
 
-            // 2. Get the collection ID
             var collectionResponse = await _chromaService.GetCollectionAsync("technical_events");
             if (!collectionResponse.IsSuccessStatusCode)
-                return NotFound("Collection 'technical_events' not found.");
+                return NotFound(ApiResponse<object>.Fail("Collection 'technical_events' not found."));
 
             var collectionJson = await collectionResponse.Content.ReadAsStringAsync();
             using var collectionDoc = JsonDocument.Parse(collectionJson);
             var collectionId = collectionDoc.RootElement.GetProperty("id").GetString()!;
 
-            // 3. Query ChromaDB
             var queryPayload = new
             {
                 query_embeddings = new[] { queryEmbedding },
@@ -47,12 +54,13 @@ namespace AIEventDiscovery.Controllers
             if (!resultResponse.IsSuccessStatusCode)
             {
                 var error = await resultResponse.Content.ReadAsStringAsync();
-                return StatusCode(500, $"Failed to query ChromaDB: {error}");
+                return StatusCode(500, ApiResponse<object>.Fail($"Failed to query ChromaDB: {error}"));
             }
 
             var resultJson = await resultResponse.Content.ReadAsStringAsync();
+            var resultData = JsonSerializer.Deserialize<object>(resultJson);
 
-            return Content(resultJson, "application/json");
+            return Ok(ApiResponse<object>.Ok(resultData, $"Found results for '{q}'."));
         }
     }
 }

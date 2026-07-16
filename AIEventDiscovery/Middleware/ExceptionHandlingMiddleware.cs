@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using AIEventDiscovery.DTOs;
 
 namespace AIEventDiscovery.Middleware
 {
@@ -32,10 +33,11 @@ namespace AIEventDiscovery.Middleware
             context.Response.ContentType = "application/json";
             context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
 
-            var result = JsonSerializer.Serialize(new
+            var response = ApiResponse<object>.Fail($"Internal Server Error: {exception.Message}");
+
+            var result = JsonSerializer.Serialize(response, new JsonSerializerOptions
             {
-                error = "Internal Server Error.",
-                message = exception.Message
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             });
 
             return context.Response.WriteAsync(result);

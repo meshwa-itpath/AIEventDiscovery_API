@@ -1,15 +1,11 @@
-using System;
+namespace AIEventDiscovery.Entities;
 
-namespace AIEventDiscovery.Entities
+public class ChatHistory : BaseEntity
 {
-    public class ChatHistory
-    {
-        public Guid Id { get; set; }
-        public Guid UserId { get; set; }
-        public string Question { get; set; } = string.Empty;
-        public string Response { get; set; } = string.Empty;
-        public DateTime CreatedAt { get; set; }
+    public Guid UserId { get; set; }
+    public string Question { get; set; } = string.Empty;
+    public string Response { get; set; } = string.Empty;
 
-        public User User { get; set; } = null!;
-    }
+    // Navigation property
+    public User User { get; set; } = null!;
 }

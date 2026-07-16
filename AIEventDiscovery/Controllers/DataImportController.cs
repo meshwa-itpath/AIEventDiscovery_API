@@ -1,3 +1,4 @@
+using AIEventDiscovery.DTOs;
 using AIEventDiscovery.Services.DataImport;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,23 +21,23 @@ public class DataImportController : ControllerBase
     /// </summary>
     [HttpPost("seed-events")]
     [Consumes("multipart/form-data")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> SeedEvents(IFormFile file)
     {
         if (file == null || file.Length == 0)
-            return BadRequest("Please upload a valid JSON file.");
+            return BadRequest(ApiResponse<object>.Fail("Please upload a valid JSON file."));
 
         if (!file.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            return BadRequest("Only .json files are accepted.");
+            return BadRequest(ApiResponse<object>.Fail("Only .json files are accepted."));
 
         await using var stream = file.OpenReadStream();
         var (successCount, message) = await _dataImportService.SeedTechnicalEventsAsync(stream);
 
         if (successCount == 0)
-            return BadRequest(new { message });
+            return BadRequest(ApiResponse<object>.Fail(message));
 
-        return Ok(new { successCount, message });
+        return Ok(ApiResponse<object>.Ok(new { successCount }, message));
     }
 }
