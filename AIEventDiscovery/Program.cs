@@ -5,6 +5,7 @@ using AIEventDiscovery.Middleware;
 using AIEventDiscovery.Services;
 using AIEventDiscovery.Services.DataImport;
 using AIEventDiscovery.Services.Embeddings;
+using AIEventDiscovery.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -13,6 +14,7 @@ using Microsoft.OpenApi;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddHttpContextAccessor();
 
 // Configure CORS to allow Angular frontend (default port 4200)
 builder.Services.AddCors(options =>
@@ -72,6 +74,8 @@ builder.Services.AddSingleton<IEmbeddingService, LocalEmbeddingService>();
 // Data import and authentication services
 builder.Services.AddScoped<IDataImportService, DataImportService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 // Generic repository — registered as an open generic so any IGenericRepository<TEntity>
 // can be injected without registering each entity separately

@@ -1,6 +1,7 @@
 using AIEventDiscovery.Data.Repositories;
 using AIEventDiscovery.DTOs;
 using AIEventDiscovery.Entities;
+using AIEventDiscovery.Services.Interfaces;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -16,13 +17,11 @@ public class AuthService : IAuthService
 {
     private readonly IGenericRepository<User> _userRepository;
     private readonly IConfiguration _configuration;
-    private readonly ILogger<AuthService> _logger;
 
     public AuthService(IGenericRepository<User> userRepository, IConfiguration configuration, ILogger<AuthService> logger)
     {
         _userRepository = userRepository;
         _configuration = configuration;
-        _logger = logger;
     }
 
     public async Task<ApiResponse<bool>> RegisterAsync(RegisterRequestDto request)
@@ -48,23 +47,29 @@ public class AuthService : IAuthService
         return ApiResponse<bool>.Ok(true, "Account created successfully.");
     }
 
-    public async Task<ApiResponse<string>> LoginAsync(LoginRequestDto request)
+    public async Task<ApiResponse<AuthResponseDto>> LoginAsync(LoginRequestDto request)
     {
         var user = await _userRepository.FindAsync(u => u.Email == request.Email.ToLower(), useAsNoTracking: true);
 
         if (user == null)
         {
-            return ApiResponse<string>.Fail("Invalid email or password.");
+            return ApiResponse<AuthResponseDto>.Fail("Invalid email or password.");
         }
 
         var isValid = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
         if (!isValid)
         {
-            return ApiResponse<string>.Fail("Invalid email or password.");
+            return ApiResponse<AuthResponseDto>.Fail("Invalid email or password.");
         }
 
         var token = GenerateJwtToken(user);
-        return ApiResponse<string>.Ok(token, "Login successful.");
+        var responseDto = new AuthResponseDto
+        {
+            Token = token,
+            IsOnBoardingCompleted = user.IsOnBoardingCompleted
+        };
+
+        return ApiResponse<AuthResponseDto>.Ok(responseDto, "Login successful.");
     }
 
     public async Task<ApiResponse<UserProfileDto>> GetProfileAsync(Guid userId)

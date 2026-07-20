@@ -12,11 +12,13 @@ namespace AIEventDiscovery.Controllers
     {
         private readonly IChromaService _chromaService;
         private readonly IEmbeddingService _embeddingService;
+        private readonly string _collectionName;
 
-        public SearchController(IChromaService chromaService, IEmbeddingService embeddingService)
+        public SearchController(IChromaService chromaService, IEmbeddingService embeddingService, Microsoft.Extensions.Options.IOptions<Configuration.ChromaDbOptions> options)
         {
             _chromaService = chromaService;
             _embeddingService = embeddingService;
+            _collectionName = options.Value.CollectionName;
         }
 
         /// <summary>
@@ -36,9 +38,9 @@ namespace AIEventDiscovery.Controllers
 
             var queryEmbedding = _embeddingService.GenerateEmbedding(q);
 
-            var collectionResponse = await _chromaService.GetCollectionAsync("technical_events");
+            var collectionResponse = await _chromaService.GetCollectionAsync(_collectionName);
             if (!collectionResponse.IsSuccessStatusCode)
-                return NotFound(ApiResponse<object>.Fail("Collection 'technical_events' not found."));
+                return NotFound(ApiResponse<object>.Fail($"Collection '{_collectionName}' not found."));
 
             var collectionJson = await collectionResponse.Content.ReadAsStringAsync();
             using var collectionDoc = JsonDocument.Parse(collectionJson);

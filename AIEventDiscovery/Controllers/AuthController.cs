@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using AIEventDiscovery.DTOs;
-using AIEventDiscovery.Services;
+using AIEventDiscovery.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,7 +17,9 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
-    /// <summary>Registers a new user. Returns 201 on success, 409 if email already exists.</summary>
+    /// <summary>
+    /// Registers a new user. Returns 201 on success, 409 if email already exists.
+    /// </summary>
     [HttpPost("register")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status409Conflict)]
@@ -25,16 +27,17 @@ public class AuthController : ControllerBase
     {
         var response = await _authService.RegisterAsync(request);
 
-        // Controller decides the HTTP status code; service only owns the message/data
         return response.Success
             ? StatusCode(StatusCodes.Status201Created, response)
             : Conflict(response);
     }
 
-    /// <summary>Authenticates a user. Returns 200 with JWT on success, 401 on invalid credentials.</summary>
+    /// <summary>
+    /// Authenticates a user. Returns 200 with JWT and user details on success, 401 on invalid credentials.
+    /// </summary>
     [HttpPost("login")]
-    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
     {
         var response = await _authService.LoginAsync(request);
@@ -44,7 +47,9 @@ public class AuthController : ControllerBase
             : Unauthorized(response);
     }
 
-    /// <summary>Returns the profile of the currently authenticated user. Requires Bearer token.</summary>
+    /// <summary>
+    /// Returns the profile of the currently authenticated user. Requires Bearer token.
+    /// </summary>
     [HttpGet("profile")]
     [Authorize]
     [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status200OK)]

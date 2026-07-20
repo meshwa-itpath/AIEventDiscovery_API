@@ -6,16 +6,16 @@ namespace AIEventDiscovery.Services.DataImport;
 
 public class DataImportService : IDataImportService
 {
-    private const string CollectionName = "technical_events";
-
+    private readonly string _collectionName;
     private readonly IChromaService _chromaService;
     private readonly IEmbeddingService _embeddingService;
     private readonly ILogger<DataImportService> _logger;
 
-    public DataImportService(IChromaService chromaService, IEmbeddingService embeddingService, ILogger<DataImportService> logger)
+    public DataImportService(IChromaService chromaService, IEmbeddingService embeddingService, Microsoft.Extensions.Options.IOptions<Configuration.ChromaDbOptions> options, ILogger<DataImportService> logger)
     {
         _chromaService = chromaService;
         _embeddingService = embeddingService;
+        _collectionName = options.Value.CollectionName;
         _logger = logger;
     }
 
@@ -40,23 +40,23 @@ public class DataImportService : IDataImportService
             return (0, "The JSON file is empty or contains no events.");
 
         // Step 2: Ensure the 'technical_events' collection exists — auto-create if missing
-        var collectionResponse = await _chromaService.GetCollectionAsync(CollectionName);
+        var collectionResponse = await _chromaService.GetCollectionAsync(_collectionName);
 
         if (!collectionResponse.IsSuccessStatusCode)
         {
-            _logger.LogInformation("Collection '{CollectionName}' not found. Auto-creating...", CollectionName);
-            var createResponse = await _chromaService.CreateCollectionAsync(CollectionName);
+            _logger.LogInformation("Collection '{CollectionName}' not found. Auto-creating...", _collectionName);
+            var createResponse = await _chromaService.CreateCollectionAsync(_collectionName);
             if (!createResponse.IsSuccessStatusCode)
             {
                 // Return the REAL ChromaDB error so it's visible
                 var err = await createResponse.Content.ReadAsStringAsync();
-                _logger.LogError("Failed to create collection '{CollectionName}': {Error}", CollectionName, err);
-                return (0, $"Failed to create collection '{CollectionName}'. ChromaDB error: {err}");
+                _logger.LogError("Failed to create collection '{CollectionName}': {Error}", _collectionName, err);
+                return (0, $"Failed to create collection '{_collectionName}'. ChromaDB error: {err}");
             }
         }
 
         // Step 3: Fetch the collection ID (ChromaDB requires ID, not name, for document operations)
-        var collectionDetailResponse = await _chromaService.GetCollectionAsync(CollectionName);
+        var collectionDetailResponse = await _chromaService.GetCollectionAsync(_collectionName);
         var collectionJson = await collectionDetailResponse.Content.ReadAsStringAsync();
         using var collectionDoc = JsonDocument.Parse(collectionJson);
         var collectionId = collectionDoc.RootElement.GetProperty("id").GetString()!;
@@ -108,15 +108,15 @@ public class DataImportService : IDataImportService
             if (!addResponse.IsSuccessStatusCode)
             {
                 var error = await addResponse.Content.ReadAsStringAsync();
-                _logger.LogError("Failed to add batch starting at index {Index} to collection '{CollectionName}': {Error}", i, CollectionName, error);
+                _logger.LogError("Failed to add batch starting at index {Index} to collection '{CollectionName}': {Error}", i, _collectionName, error);
                 return (0, $"Failed to seed documents at batch {i}: {error}");
             }
         }
 
         _logger.LogInformation(
             "Successfully seeded {Count} events into collection '{CollectionName}'.",
-            events.Count, CollectionName);
+            events.Count, _collectionName);
 
-        return (events.Count, $"Successfully seeded {events.Count} event(s) into '{CollectionName}'.");
+        return (events.Count, $"Successfully seeded {events.Count} event(s) into '{_collectionName}'.");
     }
 }

@@ -25,6 +25,15 @@ namespace AIEventDiscovery.Data.Configurations
             builder.Property(u => u.PasswordHash)
                    .IsRequired();
 
+            builder.Property(u => u.IsOnBoardingCompleted)
+                   .HasDefaultValue(false);
+
+            builder.Property(u => u.Role)
+                   .HasMaxLength(50);
+
+            builder.Property(u => u.Technology)
+                   .HasMaxLength(500);
+
             builder.HasMany(u => u.ChatHistories)
                    .WithOne(ch => ch.User)
                    .HasForeignKey(ch => ch.UserId)

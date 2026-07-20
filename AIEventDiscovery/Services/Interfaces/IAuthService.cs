@@ -1,6 +1,6 @@
 using AIEventDiscovery.DTOs;
 
-namespace AIEventDiscovery.Services;
+namespace AIEventDiscovery.Services.Interfaces;
 
 /// <summary>
 /// Defines the contract for authentication-related operations:
@@ -13,7 +13,7 @@ public interface IAuthService
     Task<ApiResponse<bool>> RegisterAsync(RegisterRequestDto request);
 
     /// <summary>Validates credentials. Returns Fail response if email/password is wrong.</summary>
-    Task<ApiResponse<string>> LoginAsync(LoginRequestDto request);
+    Task<ApiResponse<AuthResponseDto>> LoginAsync(LoginRequestDto request);
 
     /// <summary>Retrieves the public profile for the given user. Returns Fail response if not found.</summary>
     Task<ApiResponse<UserProfileDto>> GetProfileAsync(Guid userId);
