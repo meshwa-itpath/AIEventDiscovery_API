@@ -68,6 +68,9 @@ builder.Services.AddDbContext<AIEventDiscovery.Data.ApplicationDbContext>(option
 // ChromaDB HTTP client
 builder.Services.AddHttpClient<IChromaService, ChromaService>();
 
+// Gemini HTTP client
+builder.Services.AddHttpClient<IGeminiService, AIEventDiscovery.Services.LLM.GeminiService>();
+
 // Local embedding model (ONNX, loaded once at startup as a singleton)
 builder.Services.AddSingleton<IEmbeddingService, LocalEmbeddingService>();
 
@@ -75,7 +78,9 @@ builder.Services.AddSingleton<IEmbeddingService, LocalEmbeddingService>();
 builder.Services.AddScoped<IDataImportService, DataImportService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IRecommendationService, RecommendationService>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<IRetrievalService, AIEventDiscovery.Services.RAG.RetrievalService>();
 
 // Generic repository — registered as an open generic so any IGenericRepository<TEntity>
 // can be injected without registering each entity separately
@@ -83,6 +88,7 @@ builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepositor
 
 // Options binding
 builder.Services.Configure<ChromaDbOptions>(builder.Configuration.GetSection("ChromaDb"));
+builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 
 // ──────────────────────────────────────────────────────────────────
 // JWT Authentication

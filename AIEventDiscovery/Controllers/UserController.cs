@@ -28,4 +28,28 @@ public class UserController : ControllerBase
             ? Ok(response)
             : NotFound(response);
     }
+
+    [HttpGet("GetProfile")]
+    [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetProfile()
+    {
+        var response = await _userService.GetProfileAsync();
+
+        return response.Success
+            ? Ok(response)
+            : NotFound(response);
+    }
+
+    [HttpPut("UpdateProfile")]
+    [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequestDto request)
+    {
+        var response = await _userService.UpdateProfileAsync(request);
+
+        return response.Success
+            ? Ok(response)
+            : NotFound(response);
+    }
 }

@@ -41,15 +41,9 @@ public class ChromaService : IChromaService
 
     public async Task<HttpResponseMessage> CreateCollectionAsync(string collectionName, object? metadata = null)
     {
-        // ChromaDB v2 rejects empty metadata — only send it when explicitly provided
-        if (metadata != null)
-        {
-            var payloadWithMeta = new { name = collectionName, metadata };
-            return await _httpClient.PostAsJsonAsync("/api/v2/tenants/default_tenant/databases/default_database/collections", payloadWithMeta);
-        }
-
-        var payload = new { name = collectionName };
-        return await _httpClient.PostAsJsonAsync("/api/v2/tenants/default_tenant/databases/default_database/collections", payload);
+        var collectionMetadata = metadata ?? new Dictionary<string, string> { { "hnsw:space", "cosine" } };
+        var payloadWithMeta = new { name = collectionName, metadata = collectionMetadata };
+        return await _httpClient.PostAsJsonAsync("/api/v2/tenants/default_tenant/databases/default_database/collections", payloadWithMeta);
     }
 
     public async Task<HttpResponseMessage> AddDocumentsAsync(string collectionId, object payload)
@@ -65,6 +59,11 @@ public class ChromaService : IChromaService
     public async Task<HttpResponseMessage> QueryAsync(string collectionId, object queryPayload)
     {
         return await _httpClient.PostAsJsonAsync($"/api/v2/tenants/default_tenant/databases/default_database/collections/{collectionId}/query", queryPayload);
+    }
+
+    public async Task<HttpResponseMessage> DeleteCollectionAsync(string collectionName)
+    {
+        return await _httpClient.DeleteAsync($"/api/v2/tenants/default_tenant/databases/default_database/collections/{collectionName}");
     }
 }
 

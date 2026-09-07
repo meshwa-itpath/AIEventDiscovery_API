@@ -119,4 +119,18 @@ public class DataImportService : IDataImportService
 
         return (events.Count, $"Successfully seeded {events.Count} event(s) into '{_collectionName}'.");
     }
+
+    public async Task<(bool success, string message)> ClearCollectionAsync()
+    {
+        var response = await _chromaService.DeleteCollectionAsync(_collectionName);
+        if (response.IsSuccessStatusCode)
+        {
+            _logger.LogInformation("Successfully deleted ChromaDB collection '{CollectionName}'.", _collectionName);
+            return (true, $"Collection '{_collectionName}' deleted successfully.");
+        }
+
+        var error = await response.Content.ReadAsStringAsync();
+        _logger.LogError("Failed to delete collection '{CollectionName}': {Error}", _collectionName, error);
+        return (false, $"Failed to delete collection: {error}");
+    }
 }

@@ -7,4 +7,9 @@ public interface IDataImportService
     /// Events are appended — multiple file uploads accumulate into the same collection without overriding.
     /// </summary>
     Task<(int successCount, string message)> SeedTechnicalEventsAsync(Stream jsonStream);
+
+    /// <summary>
+    /// Clears/deletes the 'technical_events' ChromaDB collection and all its stored vectors.
+    /// </summary>
+    Task<(bool success, string message)> ClearCollectionAsync();
 }

@@ -9,4 +9,5 @@ public interface IChromaService
     Task<HttpResponseMessage> AddDocumentsAsync(string collectionId, object payload);
     Task<HttpResponseMessage> UpsertDocumentsAsync(string collectionId, object payload);
     Task<HttpResponseMessage> QueryAsync(string collectionId, object queryPayload);
+    Task<HttpResponseMessage> DeleteCollectionAsync(string collectionName);
 }

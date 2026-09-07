@@ -40,4 +40,19 @@ public class DataImportController : ControllerBase
 
         return Ok(ApiResponse<object>.Ok(new { successCount }, message));
     }
+
+    /// <summary>
+    /// Deletes the 'technical_events' ChromaDB collection and all its dumped data.
+    /// </summary>
+    [HttpDelete("clear-collection")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ClearCollection()
+    {
+        var (success, message) = await _dataImportService.ClearCollectionAsync();
+        if (!success)
+            return BadRequest(ApiResponse<object>.Fail(message));
+
+        return Ok(ApiResponse<object>.Ok(null, message));
+    }
 }
