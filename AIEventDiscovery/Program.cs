@@ -1,11 +1,11 @@
 using System.Text;
-using AIEventDiscovery.Configuration;
 using AIEventDiscovery.Data.Repositories;
 using AIEventDiscovery.Middleware;
 using AIEventDiscovery.Services;
 using AIEventDiscovery.Services.DataImport;
 using AIEventDiscovery.Services.Embeddings;
 using AIEventDiscovery.Services.Interfaces;
+using AIEventDiscovery.Services.PgVector;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -61,12 +61,14 @@ builder.Services.AddSwaggerGen(options =>
     //});
 });
 
-// PostgreSQL via EF Core
+// PostgreSQL via EF Core with pgvector support
 builder.Services.AddDbContext<AIEventDiscovery.Data.ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        npgsql => npgsql.UseVector()));
 
-// ChromaDB HTTP client
-builder.Services.AddHttpClient<IChromaService, ChromaService>();
+// pgvector service — replaces ChromaDB
+builder.Services.AddScoped<IPgVectorService, PgVectorService>();
 
 // Gemini HTTP client
 builder.Services.AddHttpClient<IGeminiService, AIEventDiscovery.Services.LLM.GeminiService>();
@@ -87,8 +89,7 @@ builder.Services.AddScoped<IRetrievalService, AIEventDiscovery.Services.RAG.Retr
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
 // Options binding
-builder.Services.Configure<ChromaDbOptions>(builder.Configuration.GetSection("ChromaDb"));
-builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
+builder.Services.Configure<AIEventDiscovery.Configuration.GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 
 // ──────────────────────────────────────────────────────────────────
 // JWT Authentication

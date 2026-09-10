@@ -24,21 +24,32 @@ public class DataImportController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> SeedEvents(IFormFile file)
+    public async Task<IActionResult> SeedEvents(List<IFormFile> files)
     {
-        if (file == null || file.Length == 0)
-            return BadRequest(ApiResponse<object>.Fail("Please upload a valid JSON file."));
+        if (files == null || files.Count == 0)
+            return BadRequest(ApiResponse<object>.Fail("Please upload at least one valid JSON file."));
 
-        if (!file.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            return BadRequest(ApiResponse<object>.Fail("Only .json files are accepted."));
+        int totalSeeded = 0;
+        var results = new List<string>();
 
-        await using var stream = file.OpenReadStream();
-        var (successCount, message) = await _dataImportService.SeedTechnicalEventsAsync(stream);
+        foreach (var file in files)
+        {
+            if (!file.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                results.Add($"'{file.FileName}' skipped: Only .json files are accepted.");
+                continue;
+            }
 
-        if (successCount == 0)
-            return BadRequest(ApiResponse<object>.Fail(message));
+            await using var stream = file.OpenReadStream();
+            var (successCount, message) = await _dataImportService.SeedTechnicalEventsAsync(stream);
+            
+            totalSeeded += successCount;
+            results.Add($"'{file.FileName}': {message}");
+        }
 
-        return Ok(ApiResponse<object>.Ok(new { successCount }, message));
+        return Ok(ApiResponse<object>.Ok(
+            new { totalSeeded, details = results }, 
+            $"Successfully processed files. Total events seeded: {totalSeeded}"));
     }
 
     /// <summary>

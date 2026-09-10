@@ -1,6 +1,3 @@
 <Solution>
   <Project Path="AIEventDiscovery/AIEventDiscovery.csproj" />
-  <Project Path="docker-compose.dcproj">
-    <Build />
-  </Project>
 </Solution>

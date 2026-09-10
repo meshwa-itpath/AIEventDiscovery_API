@@ -26,11 +26,12 @@ public class EventsController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetRecommendedEvents(
-        [FromQuery] int limit = 10,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
         [FromQuery] string? level = null,
         [FromQuery] string? mode = null)
     {
-        var result = await _recommendationService.GetRecommendedEventsAsync(limit, level, mode);
+        var result = await _recommendationService.GetRecommendedEventsAsync(page, pageSize, level, mode);
         if (!result.Success)
         {
             return BadRequest(result);
@@ -48,7 +49,8 @@ public class EventsController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SearchEvents(
         [FromQuery] string query,
-        [FromQuery] int limit = 10,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
         [FromQuery] string? level = null,
         [FromQuery] string? mode = null)
     {
@@ -57,7 +59,7 @@ public class EventsController : ControllerBase
             return BadRequest(ApiResponse<object>.Fail("Search query cannot be empty."));
         }
 
-        var result = await _recommendationService.SearchEventsAsync(query, limit, level, mode);
+        var result = await _recommendationService.SearchEventsAsync(query, page, pageSize, level, mode);
         if (!result.Success)
         {
             return BadRequest(result);

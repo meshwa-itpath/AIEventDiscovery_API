@@ -63,7 +63,11 @@ public class GeminiService : IGeminiService
         };
 
         var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+
+        Console.WriteLine("Gemini API call start :", DateTime.Now);
         var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_options.Model}:generateContent?key={_options.ApiKey}";
+
+        Console.WriteLine("Gemini API call end :", DateTime.Now);
 
         try
         {

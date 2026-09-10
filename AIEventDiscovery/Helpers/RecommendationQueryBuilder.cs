@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using AIEventDiscovery.DTOs;
 using AIEventDiscovery.Entities;
 
 namespace AIEventDiscovery.Helpers;
@@ -17,35 +18,34 @@ public static class RecommendationQueryBuilder
         return $"Find technical events suitable for {user.Role} interested in {techString}";
     }
 
-    public static object? BuildMetadataFilters(string? level = null, string? mode = null)
+    public static string BuildSemanticQueryForTech(User user, string technology)
     {
-        var metadataFilters = new List<Dictionary<string, object>>();
+        return $"Find technical events suitable for {user.Role} interested in {technology}";
+    }
 
-        if (!string.IsNullOrWhiteSpace(level))
+
+    public static EventQueryFilters? BuildQueryFilters(List<string>? levels = null, string? mode = null)
+    {
+        bool hasFilter = false;
+        var filters = new EventQueryFilters();
+
+        var validLevels = levels?
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .Select(l => l.Trim())
+            .ToList();
+
+        if (validLevels != null && validLevels.Any())
         {
-            metadataFilters.Add(new Dictionary<string, object> { { "level", level } });
+            filters.Levels = validLevels;
+            hasFilter = true;
         }
 
         if (!string.IsNullOrWhiteSpace(mode))
         {
-            metadataFilters.Add(new Dictionary<string, object> { { "mode", mode } });
+            filters.Mode = mode.Trim();
+            hasFilter = true;
         }
 
-        if (metadataFilters.Any())
-        {
-            if (metadataFilters.Count == 1)
-            {
-                return metadataFilters[0];
-            }
-            else
-            {
-                return new Dictionary<string, object>
-                {
-                    { "$and", metadataFilters.ToArray() }
-                };
-            }
-        }
-
-        return null;
+        return hasFilter ? filters : null;
     }
 }
