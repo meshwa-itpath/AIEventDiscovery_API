@@ -10,15 +10,18 @@ namespace AIEventDiscovery.Services;
 public class RecommendationService : IRecommendationService
 {
     private readonly IGenericRepository<User> _userRepository;
+    private readonly IGenericRepository<Event> _eventRepository;
     private readonly ICurrentUserService _currentUserService;
     private readonly IRetrievalService _retrievalService;
 
     public RecommendationService(
         IGenericRepository<User> userRepository,
+        IGenericRepository<Event> eventRepository,
         ICurrentUserService currentUserService,
         IRetrievalService retrievalService)
     {
         _userRepository = userRepository;
+        _eventRepository = eventRepository;
         _currentUserService = currentUserService;
         _retrievalService = retrievalService;
     }
@@ -48,23 +51,14 @@ public class RecommendationService : IRecommendationService
 
         // Normalize filter inputs (treat "All" or whitespace as null)
         if (string.Equals(level, EventLevels.All, StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(level))
-        {
             level = null;
-        }
 
         if (string.Equals(mode, "All", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(mode))
-        {
             mode = null;
-        }
 
-        var technologies = user.Technology?
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToList() ?? new List<string>();
+        var (primaries, modifiers, allTechnologies) = RecommendationQueryBuilder.ResolveUserPreferences(user);
 
-        // Determine effective level filter vs proportional distribution:
-        // 1. If explicit level was provided -> use explicit level for hard filter
-        // 2. If no level provided and role is Student -> use Beginner for hard filter
-        // 3. If no level provided and role is Professional -> no hard level filter in DB; apply proportional 70/15/15 blending
+        // Determine effective level filter vs proportional distribution
         bool isStudent = EventRoles.IsStudent(user.Role);
         List<string>? dbFilterLevels = null;
         bool applyProportionalBlending = false;
@@ -84,118 +78,32 @@ public class RecommendationService : IRecommendationService
 
         var queryFilters = RecommendationQueryBuilder.BuildQueryFilters(dbFilterLevels, mode);
 
-        // Pool size = pageSize × 5, capped at 50 to cover all pages
+        // Pool size = pageSize × 5, capped at 50
         int poolSize = Math.Min(pageSize * 5, 50);
 
         List<RecommendedEventDto> fullRankedPool;
 
-        if (!technologies.Any())
+        if (primaries.Count == 0 && modifiers.Count == 0)
         {
-            var queryText = RecommendationQueryBuilder.BuildSemanticQuery(user);
-            var request = new RetrievalRequest
-            {
-                QueryText = queryText,
-                QueryFilters = queryFilters,
-                Limit = poolSize,
-                FinalLimit = poolSize,
-                SimilarityThreshold = 0.7,
-                EnableReRanking = true,
-                FilterExpiredEvents = true,
-                EnableGeminiExplanation = false,
-                UserContext = user
-            };
-
-            var rawPool = await _retrievalService.ExecutePipelineAsync(request);
-            fullRankedPool = applyProportionalBlending 
-                ? ApplyProportionalLevelDistribution(rawPool, poolSize)
-                : rawPool;
+            // No tech interests on profile — run a single generic query
+            fullRankedPool = await FetchGenericPoolAsync(user, queryFilters, poolSize);
         }
         else
         {
-            var candidatePool = new List<(string Tech, RecommendedEventDto Event)>();
-            int limitPerTech = Math.Max(15, (int)Math.Ceiling((double)poolSize / technologies.Count * 1.5));
-
-            foreach (var tech in technologies)
-            {
-                var queryText = RecommendationQueryBuilder.BuildSemanticQueryForTech(user, tech);
-                var request = new RetrievalRequest
-                {
-                    QueryText = queryText,
-                    QueryFilters = queryFilters,
-                    Limit = limitPerTech,
-                    FinalLimit = limitPerTech,
-                    SimilarityThreshold = 0.7,
-                    EnableReRanking = true,
-                    FilterExpiredEvents = true,
-                    EnableGeminiExplanation = false,
-                    UserContext = user
-                };
-
-                var techResults = await _retrievalService.ExecutePipelineAsync(request);
-                foreach (var result in techResults)
-                {
-                    candidatePool.Add((tech, result));
-                }
-            }
-
-            // Deduplicate: keep the entry with the highest similarity score per event
-            var deduplicatedCandidates = new Dictionary<string, (string Tech, RecommendedEventDto Event)>();
-            foreach (var candidate in candidatePool)
-            {
-                if (deduplicatedCandidates.TryGetValue(candidate.Event.Id, out var existingCandidate))
-                {
-                    if (candidate.Event.SimilarityScore > existingCandidate.Event.SimilarityScore)
-                        deduplicatedCandidates[candidate.Event.Id] = candidate;
-                }
-                else
-                {
-                    deduplicatedCandidates[candidate.Event.Id] = candidate;
-                }
-            }
-
-            // Group by interest, sorted by score within each group
-            var groupedCandidates = deduplicatedCandidates.Values
-                .GroupBy(c => c.Tech)
-                .ToDictionary(g => g.Key, g => g.Select(c => c.Event).OrderByDescending(e => e.SimilarityScore).ToList());
-
-            // Round Robin: pick one event per interest in turns
-            var roundRobinPool = new List<RecommendedEventDto>();
-            var pointers = technologies.ToDictionary(t => t, t => 0);
-            bool addedAny = true;
-            int maxPerInterest = Math.Max(10, (int)Math.Ceiling((double)poolSize / technologies.Count));
-
-            while (addedAny && roundRobinPool.Count < poolSize)
-            {
-                addedAny = false;
-                foreach (var tech in technologies)
-                {
-                    if (roundRobinPool.Count >= poolSize) break;
-
-                    if (groupedCandidates.TryGetValue(tech, out var techEvents))
-                    {
-                        int pointer = pointers[tech];
-                        if (pointer < techEvents.Count && pointer < maxPerInterest)
-                        {
-                            roundRobinPool.Add(techEvents[pointer]);
-                            pointers[tech]++;
-                            addedAny = true;
-                        }
-                    }
-                }
-            }
-
-            // Apply proportional level blending if professional role and no explicit level was given
-            fullRankedPool = applyProportionalBlending
-                ? ApplyProportionalLevelDistribution(roundRobinPool, poolSize)
-                : roundRobinPool.OrderByDescending(e => e.SimilarityScore).ToList();
+            fullRankedPool = await FetchClusteredPoolAsync(user, primaries, modifiers, allTechnologies, queryFilters, poolSize);
         }
 
-        if (!fullRankedPool.Any())
+        // Apply proportional level distribution for professional roles with no explicit level filter
+        if (applyProportionalBlending)
         {
-            return ApiResponse<List<RecommendedEventDto>>.Ok(new List<RecommendedEventDto>(), "No matching events found.");
+            fullRankedPool = ApplyProportionalLevelDistribution(fullRankedPool, poolSize);
         }
 
-        // Apply pagination slice
+        if (fullRankedPool.Count == 0)
+        {
+            return ApiResponse<List<RecommendedEventDto>>.Ok([], "No matching events found.");
+        }
+
         int totalRecords = fullRankedPool.Count;
         var pagedData = fullRankedPool
             .Skip((page - 1) * pageSize)
@@ -230,19 +138,14 @@ public class RecommendationService : IRecommendationService
         }
 
         if (string.Equals(level, EventLevels.All, StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(level))
-        {
             level = null;
-        }
 
         if (string.Equals(mode, "All", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(mode))
-        {
             mode = null;
-        }
 
-        var searchLevels = !string.IsNullOrWhiteSpace(level) ? new List<string> { level } : null;
+        List<string>? searchLevels = !string.IsNullOrWhiteSpace(level) ? [level] : null;
         var queryFilters = RecommendationQueryBuilder.BuildQueryFilters(searchLevels, mode);
 
-        // Pool size = pageSize × 5, capped at 50 to cover all pages
         int poolSize = Math.Min(pageSize * 5, 50);
 
         var request = new RetrievalRequest
@@ -260,12 +163,11 @@ public class RecommendationService : IRecommendationService
 
         var fullRankedPool = await _retrievalService.ExecutePipelineAsync(request);
 
-        if (!fullRankedPool.Any())
+        if (fullRankedPool.Count == 0)
         {
-            return ApiResponse<List<RecommendedEventDto>>.Ok(new List<RecommendedEventDto>(), "No matching events found.");
+            return ApiResponse<List<RecommendedEventDto>>.Ok([], "No matching events found.");
         }
 
-        // Apply pagination slice
         int totalRecords = fullRankedPool.Count;
         var pagedData = fullRankedPool
             .Skip((page - 1) * pageSize)
@@ -280,11 +182,331 @@ public class RecommendationService : IRecommendationService
             "Successfully retrieved search results.");
     }
 
+    public async Task<ApiResponse<EventDetailDto>> GetEventByIdAsync(Guid id)
+    {
+        if (id == Guid.Empty)
+        {
+            return ApiResponse<EventDetailDto>.Fail("Invalid event ID.");
+        }
+
+        var eventDetail = await _eventRepository.GetByIdAsync(id, e => new EventDetailDto
+        {
+            Id = e.Id,
+            Title = e.Title,
+            Description = e.Description,
+            Category = e.Category,
+            SubCategory = e.SubCategory,
+            Technologies = e.Technologies,
+            Tags = e.Tags,
+            Organizer = e.Organizer,
+            City = e.City,
+            Country = e.Country,
+            Venue = e.Venue,
+            Mode = e.Mode,
+            Level = e.Level,
+            EventType = e.EventType,
+            StartDate = e.StartDate,
+            EndDate = e.EndDate,
+            Rating = e.Rating,
+            CreatedAt = e.CreatedAt
+        });
+
+        if (eventDetail == null)
+        {
+            return ApiResponse<EventDetailDto>.Fail("Event not found.");
+        }
+
+        return ApiResponse<EventDetailDto>.Ok(eventDetail, "Event details retrieved successfully.");
+    }
+
+    // ── Private Pipeline Helpers ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Fetches a candidate pool using a single generic query when the user has no technology interests.
+    /// </summary>
+    private async Task<List<RecommendedEventDto>> FetchGenericPoolAsync(
+        User user,
+        EventQueryFilters? queryFilters,
+        int poolSize)
+    {
+        var request = new RetrievalRequest
+        {
+            QueryText = RecommendationQueryBuilder.BuildGenericQuery(user),
+            QueryFilters = queryFilters,
+            Limit = poolSize,
+            FinalLimit = poolSize,
+            SimilarityThreshold = 0.7,
+            EnableReRanking = true,
+            FilterExpiredEvents = true,
+            EnableGeminiExplanation = false,
+            UserContext = user
+        };
+
+        return await _retrievalService.ExecutePipelineAsync(request);
+    }
+
+    /// <summary>
+    /// Fetches candidates per primary ecosystem cluster, distributes quota equally across clusters,
+    /// applies multi-tag overlap boosting, and returns a deduplicated ranked pool.
+    /// </summary>
+    private async Task<List<RecommendedEventDto>> FetchClusteredPoolAsync(
+        User user,
+        List<string> primaries,
+        List<string> modifiers,
+        List<string> allUserTechnologies,
+        EventQueryFilters? queryFilters,
+        int poolSize)
+    {
+        // Each primary ecosystem cluster gets an equal share of the total pool
+        int quotaPerCluster = (int)Math.Ceiling((double)poolSize / primaries.Count);
+        // Fetch slightly more per cluster to account for deduplication loss
+        int limitPerCluster = Math.Max(15, (int)(quotaPerCluster * 1.5));
+
+        // Collect candidates per cluster maintaining cluster identity for round-robin
+        var clusterBuckets = new Dictionary<string, List<RecommendedEventDto>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var primary in primaries)
+        {
+            var queryText = RecommendationQueryBuilder.BuildAnchoredQuery(user, primary, modifiers);
+            var request = new RetrievalRequest
+            {
+                QueryText = queryText,
+                QueryFilters = queryFilters,
+                Limit = limitPerCluster,
+                FinalLimit = limitPerCluster,
+                SimilarityThreshold = 0.75,
+                EnableReRanking = true,
+                FilterExpiredEvents = true,
+                EnableGeminiExplanation = false,
+                UserContext = user
+            };
+
+            var clusterResults = await _retrievalService.ExecutePipelineAsync(request);
+
+            // Apply weighted primary/modifier ranking
+            ApplyWeightedRanking(clusterResults, primary, modifiers);
+
+            // Re-sort within the cluster after ranking
+            clusterResults.Sort((a, b) => b.RankingScore.CompareTo(a.RankingScore));
+            clusterBuckets[primary] = clusterResults;
+        }
+
+        // Deduplicate across clusters: keep the entry with the highest score per event
+        var deduplicated = new Dictionary<string, RecommendedEventDto>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (_, events) in clusterBuckets)
+        {
+            foreach (var ev in events)
+            {
+                if (!deduplicated.TryGetValue(ev.Id, out var existing) || ev.RankingScore > existing.RankingScore)
+                {
+                    deduplicated[ev.Id] = ev;
+                }
+            }
+        }
+
+        // Re-group deduplicated events back into cluster buckets (by best-cluster assignment)
+        var regrouped = new Dictionary<string, List<RecommendedEventDto>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var primary in primaries)
+        {
+            regrouped[primary] = [];
+        }
+
+        foreach (var ev in deduplicated.Values)
+        {
+            // Assign event to the cluster whose query best matched it (highest score contribution)
+            // Simple heuristic: assign to the cluster bucket it originally appeared in first
+            bool assigned = false;
+            foreach (var primary in primaries)
+            {
+                if (clusterBuckets[primary].Any(e => e.Id == ev.Id))
+                {
+                    regrouped[primary].Add(ev);
+                    assigned = true;
+                    break;
+                }
+            }
+            // Safety fallback: assign to first cluster if not matched
+            if (!assigned)
+            {
+                regrouped[primaries[0]].Add(ev);
+            }
+        }
+
+        // Ensure each cluster bucket is sorted by score descending
+        foreach (var key in regrouped.Keys.ToList())
+        {
+            regrouped[key].Sort((a, b) => b.RankingScore.CompareTo(a.RankingScore));
+        }
+
+        // Round-robin across clusters to guarantee balanced representation
+        var roundRobinPool = new List<RecommendedEventDto>(poolSize);
+        var pointers = primaries.ToDictionary(p => p, _ => 0, StringComparer.OrdinalIgnoreCase);
+        bool addedAny = true;
+
+        while (addedAny && roundRobinPool.Count < poolSize)
+        {
+            addedAny = false;
+            foreach (var primary in primaries)
+            {
+                if (roundRobinPool.Count >= poolSize) break;
+
+                int ptr = pointers[primary];
+                if (ptr < regrouped[primary].Count && ptr < quotaPerCluster)
+                {
+                    roundRobinPool.Add(regrouped[primary][ptr]);
+                    pointers[primary]++;
+                    addedAny = true;
+                }
+            }
+        }
+
+        // Final global sort by ranking score — highest quality events rise to the top
+        roundRobinPool.Sort((a, b) => b.RankingScore.CompareTo(a.RankingScore));
+        return roundRobinPool;
+    }
+
+    /// <summary>
+    /// Computes a weighted RankingScore for each event based on user preferences:
+    ///   - Primary technology match receives the strongest boost (+0.30)
+    ///   - Modifiers provide smaller boosts (+0.05 per modifier, up to +0.10)
+    ///   - Primary + modifier combined match receives an additional synergy boost (+0.15)
+    ///   - Modifier-only events receive a smaller boost (+0.03, capped at +0.05) and cannot
+    ///     outrank primary-focused events regardless of raw vector similarity.
+    /// Preserves the raw pgvector SimilarityScore untouched.
+    /// </summary>
+    internal static void ApplyWeightedRanking(
+        List<RecommendedEventDto> events,
+        string primaryTech,
+        List<string> modifiers)
+    {
+        const double PrimaryBoost = 0.30;
+        const double ModifierBoost = 0.05;
+        const double SynergyBoost = 0.15;
+        const double MaxModifierBoost = 0.10;
+        const double ModifierOnlyCap = 0.05;
+
+        foreach (var ev in events)
+        {
+            double score = ev.SimilarityScore;
+            bool hasPrimaryMatch = MatchesTechnology(ev, primaryTech);
+
+            int matchedModifiersCount = 0;
+            foreach (var mod in modifiers)
+            {
+                if (MatchesTechnology(ev, mod))
+                {
+                    matchedModifiersCount++;
+                }
+            }
+
+            if (hasPrimaryMatch)
+            {
+                score += PrimaryBoost;
+                double modBoost = Math.Min(matchedModifiersCount * ModifierBoost, MaxModifierBoost);
+                score += modBoost;
+
+                if (matchedModifiersCount > 0)
+                {
+                    score += SynergyBoost;
+                }
+            }
+            else if (matchedModifiersCount > 0)
+            {
+                // Modifier-only match: keep small so primary-technology events dominate
+                score += Math.Min(matchedModifiersCount * 0.03, ModifierOnlyCap);
+            }
+
+            ev.RankingScore = Math.Round(score, 4);
+        }
+    }
+
+    private static readonly Dictionary<string, string[]> TechnologySynonyms = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["DotNet Development"] = [".NET", "DotNet", "C#", "ASP.NET", "F#", "Blazor", "Entity Framework", "EF Core"],
+        [".NET"] = [".NET", "DotNet", "C#", "ASP.NET", "F#", "Blazor", "Entity Framework", "EF Core"],
+        ["Backend Development"] = ["Backend", "Server-Side", "Server Side", "Microservices"],
+        ["Frontend Development"] = ["Frontend", "Front-end", "UI", "Web UI", "Client-Side", "React", "Angular", "Vue", "TypeScript", "JavaScript", "Next.js"],
+        ["Java Development"] = ["Java", "Spring", "SpringBoot", "Kotlin", "Quarkus"],
+        ["Python Development"] = ["Python", "Django", "FastAPI", "Flask"],
+        ["AI & Generative AI"] = ["AI", "GenAI", "Generative AI", "LLM", "GPT", "Deep Learning"],
+        ["AI Frameworks"] = ["LangChain", "Semantic Kernel", "LlamaIndex", "HuggingFace", "PyTorch", "TensorFlow"],
+        ["Machine Learning"] = ["Machine Learning", "ML", "Data Science", "Scikit"],
+        ["Data Engineering"] = ["Data Engineering", "Spark", "Kafka", "ETL", "Airflow", "Hadoop"],
+        ["Mobile Development"] = ["Mobile", "Android", "iOS", "Flutter", "React Native", "Swift"],
+        ["API Development"] = ["API", "REST", "GraphQL", "gRPC", "Web API"],
+        ["CI/CD"] = ["CI/CD", "Continuous Integration", "Continuous Deployment", "GitHub Actions", "Jenkins", "GitLab"],
+        ["DevOps & Infrastructure"] = ["DevOps", "Docker", "Kubernetes", "K8s", "Terraform", "Ansible", "Helm"],
+        ["Database Development"] = ["Database", "SQL", "PostgreSQL", "Postgres", "MySQL", "MongoDB", "Redis"],
+        ["Cloud Computing"] = ["Cloud", "AWS", "Azure", "GCP", "Serverless"],
+        ["Vector Databases"] = ["Vector", "pgvector", "Pinecone", "Milvus", "Qdrant", "Weaviate"],
+        ["Search Technologies"] = ["Search", "Elasticsearch", "OpenSearch", "Lucene", "Solr"],
+        ["Monitoring & Observability"] = ["Monitoring", "Observability", "Prometheus", "Grafana", "OpenTelemetry"]
+    };
+
+    private static bool MatchesTechnology(RecommendedEventDto ev, string technology)
+    {
+        if (string.IsNullOrWhiteSpace(technology)) return false;
+
+        var tokens = TechnologySynonyms.TryGetValue(technology.Trim(), out var synonyms)
+            ? synonyms
+            : [technology.Trim()];
+
+        // 1. Check Technologies list
+        if (ev.Technologies != null)
+        {
+            foreach (var t in ev.Technologies)
+            {
+                if (string.IsNullOrWhiteSpace(t)) continue;
+                foreach (var token in tokens)
+                {
+                    if (ItemMatchesToken(t, token))
+                        return true;
+                }
+            }
+        }
+
+        // 2. Check Tags list
+        if (ev.Tags != null)
+        {
+            foreach (var tag in ev.Tags)
+            {
+                if (string.IsNullOrWhiteSpace(tag)) continue;
+                foreach (var token in tokens)
+                {
+                    if (ItemMatchesToken(tag, token))
+                        return true;
+                }
+            }
+        }
+
+        // 3. Check Title fallback
+        if (!string.IsNullOrWhiteSpace(ev.Title))
+        {
+            foreach (var token in tokens)
+            {
+                if (token.Length >= 2 && ev.Title.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ItemMatchesToken(string item, string token)
+    {
+        if (string.Equals(item, token, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (token.Length <= 2)
+            return false;
+
+        return item.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
     /// <summary>
     /// Distributes candidates proportionally according to LevelDistributionRatios:
     /// ~70% Intermediate (+ All Levels / unclassified), ~15% Beginner, ~15% Advanced.
-    /// If any bucket has fewer candidates than its quota, remaining slots are automatically
-    /// backfilled from remaining candidates ordered by similarity score.
+    /// Any shortfall in a bucket is backfilled from remaining candidates ordered by score.
     /// </summary>
     private static List<RecommendedEventDto> ApplyProportionalLevelDistribution(
         List<RecommendedEventDto> candidates,
@@ -292,40 +514,33 @@ public class RecommendationService : IRecommendationService
     {
         if (candidates.Count <= targetSize)
         {
-            return candidates.OrderByDescending(e => e.SimilarityScore).ToList();
+            return candidates.OrderByDescending(e => e.RankingScore).ToList();
         }
 
+        var beginnerBucket   = new List<RecommendedEventDto>();
+        var advancedBucket   = new List<RecommendedEventDto>();
         var intermediateBucket = new List<RecommendedEventDto>();
-        var beginnerBucket = new List<RecommendedEventDto>();
-        var advancedBucket = new List<RecommendedEventDto>();
 
         foreach (var ev in candidates)
         {
             var lvl = ev.Level?.Trim().ToLowerInvariant();
             if (lvl == "beginner")
-            {
                 beginnerBucket.Add(ev);
-            }
             else if (lvl == "advanced")
-            {
                 advancedBucket.Add(ev);
-            }
             else
-            {
-                // Intermediate, "All Levels", "All", or unclassified
-                intermediateBucket.Add(ev);
-            }
+                intermediateBucket.Add(ev); // Intermediate, "All Levels", "All", or unclassified
         }
 
-        intermediateBucket = intermediateBucket.OrderByDescending(e => e.SimilarityScore).ToList();
-        beginnerBucket = beginnerBucket.OrderByDescending(e => e.SimilarityScore).ToList();
-        advancedBucket = advancedBucket.OrderByDescending(e => e.SimilarityScore).ToList();
+        intermediateBucket.Sort((a, b) => b.RankingScore.CompareTo(a.RankingScore));
+        beginnerBucket.Sort((a, b)     => b.RankingScore.CompareTo(a.RankingScore));
+        advancedBucket.Sort((a, b)     => b.RankingScore.CompareTo(a.RankingScore));
 
         int targetIntermediate = (int)Math.Round(targetSize * LevelDistributionRatios.IntermediateRatio);
-        int targetBeginner = (int)Math.Round(targetSize * LevelDistributionRatios.BeginnerRatio);
-        int targetAdvanced = targetSize - targetIntermediate - targetBeginner;
+        int targetBeginner     = (int)Math.Round(targetSize * LevelDistributionRatios.BeginnerRatio);
+        int targetAdvanced     = targetSize - targetIntermediate - targetBeginner;
 
-        var selected = new List<RecommendedEventDto>();
+        var selected    = new List<RecommendedEventDto>(targetSize);
         var selectedIds = new HashSet<string>();
 
         void AddFromBucket(List<RecommendedEventDto> bucket, int quota)
@@ -346,21 +561,26 @@ public class RecommendationService : IRecommendationService
         AddFromBucket(beginnerBucket, targetBeginner);
         AddFromBucket(advancedBucket, targetAdvanced);
 
-        // Backfill if any bucket ran short of its quota
+        // Backfill any shortfall from remaining candidates
         if (selected.Count < targetSize)
         {
-            var remaining = candidates
-                .Where(e => !selectedIds.Contains(e.Id))
-                .OrderByDescending(e => e.SimilarityScore);
-
-            foreach (var ev in remaining)
+            foreach (var ev in candidates.OrderByDescending(e => e.RankingScore))
             {
                 if (selected.Count >= targetSize) break;
-                selected.Add(ev);
-                selectedIds.Add(ev.Id);
+                if (selectedIds.Add(ev.Id))
+                {
+                    selected.Add(ev);
+                }
             }
         }
 
-        return selected.OrderByDescending(e => e.SimilarityScore).ToList();
+        return selected.OrderByDescending(e => e.RankingScore).ToList();
     }
+
+    // ── Utilities ────────────────────────────────────────────────────────────────
+
+    private static List<string> ParseTechnologies(string? technology) =>
+        technology?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList() ?? [];
 }

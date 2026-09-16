@@ -66,4 +66,20 @@ public class EventsController : ControllerBase
         }
         return Ok(result);
     }
+
+    /// <summary>
+    /// Retrieves full event details by event ID.
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(ApiResponse<EventDetailDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetEventById([FromRoute] Guid id)
+    {
+        var result = await _recommendationService.GetEventByIdAsync(id);
+        if (!result.Success)
+        {
+            return NotFound(result);
+        }
+        return Ok(result);
+    }
 }

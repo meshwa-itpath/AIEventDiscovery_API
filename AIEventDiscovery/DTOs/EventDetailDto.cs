@@ -1,17 +1,18 @@
-using System;
-using System.Collections.Generic;
-
 namespace AIEventDiscovery.DTOs;
 
-public class RecommendedEventDto
+/// <summary>
+/// Data transfer object for full event details view.
+/// Excludes pgvector embedding payload for optimal network performance.
+/// </summary>
+public class EventDetailDto
 {
-    public string Id { get; set; } = string.Empty;
+    public Guid Id { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string? Category { get; set; }
     public string? SubCategory { get; set; }
-    public List<string> Technologies { get; set; } = new();
-    public List<string> Tags { get; set; } = new();
+    public List<string> Technologies { get; set; } = [];
+    public List<string> Tags { get; set; } = [];
     public string? Organizer { get; set; }
     public string? City { get; set; }
     public string? Country { get; set; }
@@ -22,7 +23,5 @@ public class RecommendedEventDto
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
     public double? Rating { get; set; }
-    public double SimilarityScore { get; set; }
-    public double RankingScore { get; set; }
-    public string? Explanation { get; set; }
+    public DateTime CreatedAt { get; set; }
 }

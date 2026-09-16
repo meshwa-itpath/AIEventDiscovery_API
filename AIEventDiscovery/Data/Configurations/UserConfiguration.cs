@@ -31,6 +31,12 @@ namespace AIEventDiscovery.Data.Configurations
             builder.Property(u => u.Role)
                    .HasMaxLength(50);
 
+            builder.Property(u => u.PrimaryStacks)
+                   .HasMaxLength(250);
+
+            builder.Property(u => u.Interests)
+                   .HasMaxLength(500);
+
             builder.Property(u => u.Technology)
                    .HasMaxLength(500);
 

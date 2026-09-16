@@ -36,9 +36,40 @@ public class UserService : IUserService
         }
 
         user.Role = request.Role;
-        user.Technology = request.Technology == null || !request.Technology.Any()
-            ? null
-            : string.Join(",", request.Technology);
+
+        var primaryStacks = request.PrimaryStacks?
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        user.PrimaryStacks = primaryStacks != null && primaryStacks.Count > 0
+            ? string.Join(",", primaryStacks)
+            : null;
+
+        var interests = request.Interests?
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        user.Interests = interests != null && interests.Count > 0
+            ? string.Join(",", interests)
+            : null;
+
+        // // Synchronize legacy Technology column for backward compatibility
+        // var allTech = new List<string>();
+        // if (primaryStacks != null) allTech.AddRange(primaryStacks);
+        // if (interests != null) allTech.AddRange(interests);
+        // if (allTech.Count == 0 && request.Technology != null)
+        // {
+        //     allTech.AddRange(request.Technology.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()));
+        // }
+
+        // user.Technology = allTech.Count > 0
+        //     ? string.Join(",", allTech.Distinct(StringComparer.OrdinalIgnoreCase))
+        //     : null;
+
         user.UpdatedBy = userId;
 
         await _userRepository.UpsertAsync(user);
@@ -62,12 +93,11 @@ public class UserService : IUserService
 
         var profileDto = new UserProfileDto
         {
-            FirstName  = user.FirstName,
-            LastName   = user.LastName,
-            Role       = user.Role,
-            Technology = string.IsNullOrWhiteSpace(user.Technology)
-                ? null
-                : user.Technology.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList()
+            FirstName     = user.FirstName,
+            LastName      = user.LastName,
+            Role          = user.Role,
+            PrimaryStacks = ParseCommaSeparated(user.PrimaryStacks),
+            Interests     = ParseCommaSeparated(user.Interests),
         };
 
         return ApiResponse<UserProfileDto>.Ok(profileDto, "Profile retrieved successfully.");
@@ -97,10 +127,25 @@ public class UserService : IUserService
         if (request.Role != null)
             user.Role = request.Role;
 
-        if (request.Technology != null)
-            user.Technology = request.Technology.Any()
-                ? string.Join(",", request.Technology)
-                : null;
+        if (request.PrimaryStacks != null)
+        {
+            var primaryStacks = request.PrimaryStacks
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            user.PrimaryStacks = primaryStacks.Count > 0 ? string.Join(",", primaryStacks) : null;
+        }
+
+        if (request.Interests != null)
+        {
+            var interests = request.Interests
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            user.Interests = interests.Count > 0 ? string.Join(",", interests) : null;
+        }
 
         user.UpdatedBy = userId;
 
@@ -109,14 +154,18 @@ public class UserService : IUserService
         // Build the response DTO from the updated entity
         var profileDto = new UserProfileDto
         {
-            FirstName  = user.FirstName,
-            LastName   = user.LastName,
-            Role       = user.Role,
-            Technology = string.IsNullOrWhiteSpace(user.Technology)
-                ? null
-                : user.Technology.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList()
+            FirstName     = user.FirstName,
+            LastName      = user.LastName,
+            Role          = user.Role,
+            PrimaryStacks = ParseCommaSeparated(user.PrimaryStacks),
+            Interests     = ParseCommaSeparated(user.Interests),
         };
 
         return ApiResponse<UserProfileDto>.Ok(profileDto, "Profile updated successfully.");
     }
+
+    private static List<string>? ParseCommaSeparated(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? null
+            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 }

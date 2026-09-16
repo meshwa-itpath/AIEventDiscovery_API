@@ -92,7 +92,8 @@ public class RetrievalService : IRetrievalService
             StartDate      = r.Event.StartDate,
             EndDate        = r.Event.EndDate,
             Rating         = r.Event.Rating,
-            SimilarityScore = r.SimilarityScore
+            SimilarityScore = r.SimilarityScore,
+            RankingScore    = r.SimilarityScore
         }).ToList();
     }
 

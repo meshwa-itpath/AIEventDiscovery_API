@@ -36,3 +36,41 @@ public static class LevelDistributionRatios
     public const double BeginnerRatio = 0.15;     // 15%
     public const double AdvancedRatio = 0.15;     // 15%
 }
+
+/// <summary>
+/// Classifies user-selectable technologies into two groups used by the recommendation pipeline:
+/// <list type="bullet">
+///   <item><term>PrimaryEcosystems</term><description>Independent programming stacks. Multiple selections get balanced (equal-quota) result clusters.</description></item>
+///   <item><term>CrossCuttingModifiers</term><description>Topic modifiers that are anchored to a primary ecosystem in the query rather than issued as standalone queries.</description></item>
+/// </list>
+/// Keep this list in sync with the technology options shown in the onboarding / update-profile UI.
+/// </summary>
+public static class TechnologyTaxonomy
+{
+    public static readonly IReadOnlySet<string> PrimaryEcosystems = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "DotNet Development",
+        "Java Development",
+        "Python Development",
+        "AI & Generative AI",
+        "AI Frameworks",
+        "Machine Learning",
+        "Data Engineering",
+        "Mobile Development"
+    };
+
+    public static readonly IReadOnlySet<string> CrossCuttingModifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "Backend Development",
+        "Frontend Development",
+        "Database Development",
+        "Cloud Computing",
+        "DevOps & Infrastructure",
+        "Vector Databases",
+        "Messaging Systems",
+        "CI/CD",
+        "Monitoring & Observability",
+        "Search Technologies",
+        "API Development"
+    };
+}

@@ -57,7 +57,7 @@ public class DataImportService : IDataImportService
 
             foreach (var dto in batch)
             {
-                var textToEmbed = $"{dto.Title}. {dto.Description}";
+                var textToEmbed = BuildEventEmbeddingText(dto);
                 var embeddingArray = _embeddingService.GenerateEmbedding(textToEmbed);
 
                 eventEntities.Add(new Event
@@ -114,5 +114,32 @@ public class DataImportService : IDataImportService
             _logger.LogError(ex, "Failed to delete events.");
             return (false, $"Failed to delete events: {ex.Message}");
         }
+    }
+
+    private static string BuildEventEmbeddingText(TechnicalEventDto dto)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append(dto.Title);
+        if (!string.IsNullOrWhiteSpace(dto.Description))
+        {
+            sb.Append(". ").Append(dto.Description);
+        }
+        if (!string.IsNullOrWhiteSpace(dto.Category))
+        {
+            sb.Append(". Category: ").Append(dto.Category);
+        }
+        if (!string.IsNullOrWhiteSpace(dto.SubCategory))
+        {
+            sb.Append(". SubCategory: ").Append(dto.SubCategory);
+        }
+        if (dto.Technologies?.Count > 0)
+        {
+            sb.Append(". Technologies: ").Append(string.Join(", ", dto.Technologies));
+        }
+        if (dto.Tags?.Count > 0)
+        {
+            sb.Append(". Tags: ").Append(string.Join(", ", dto.Tags));
+        }
+        return sb.ToString();
     }
 }

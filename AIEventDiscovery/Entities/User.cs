@@ -9,6 +9,8 @@ public class User : BaseEntity
     public bool IsActive { get; set; } = true;
     public bool IsOnBoardingCompleted { get; set; } = false;
     public string? Role { get; set; }
+    public string? PrimaryStacks { get; set; }
+    public string? Interests { get; set; }
     public string? Technology { get; set; }
 
     public ICollection<ChatHistory> ChatHistories { get; set; } = new List<ChatHistory>();

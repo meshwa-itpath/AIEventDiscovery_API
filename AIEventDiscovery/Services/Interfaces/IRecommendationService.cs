@@ -18,4 +18,6 @@ public interface IRecommendationService
         int pageSize,
         string? level = null,
         string? mode = null);
+
+    Task<ApiResponse<EventDetailDto>> GetEventByIdAsync(Guid id);
 }
