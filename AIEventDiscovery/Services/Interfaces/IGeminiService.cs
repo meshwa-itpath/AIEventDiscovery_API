@@ -6,4 +6,5 @@ namespace AIEventDiscovery.Services.Interfaces;
 public interface IGeminiService
 {
     Task<Dictionary<string, string>> GenerateBatchExplanationsAsync(User user, List<RecommendedEventDto> events);
+    Task<QueryUnderstandingResult> UnderstandQueryAsync(string userQuery, CancellationToken cancellationToken = default);
 }

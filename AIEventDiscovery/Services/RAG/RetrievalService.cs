@@ -41,8 +41,8 @@ public class RetrievalService : IRetrievalService
         // 5. Remove Duplicates
         var uniqueEvents = currentEvents.GroupBy(e => e.Id).Select(g => g.First()).ToList();
 
-        // 6. Re-ranking (based on Date + Score)
-        var rankedEvents = ReRankEvents(uniqueEvents, request.EnableReRanking, request.FinalLimit);
+        // 6. Re-ranking (based on Date + Score + SoftFilters)
+        var rankedEvents = ReRankEvents(uniqueEvents, request, request.EnableReRanking, request.FinalLimit);
 
         // 7. Gemini Explanation Generation
         if (request.EnableGeminiExplanation && request.UserContext != null)
@@ -104,19 +104,56 @@ public class RetrievalService : IRetrievalService
         return events.Where(e => e.StartDate == null || e.StartDate >= today).ToList();
     }
 
-    private static List<RecommendedEventDto> ReRankEvents(List<RecommendedEventDto> events, bool enableReRanking, int finalLimit)
+    private static List<RecommendedEventDto> ReRankEvents(List<RecommendedEventDto> events, RetrievalRequest request, bool enableReRanking, int finalLimit)
     {
-        if (!enableReRanking)
+        if (!enableReRanking && (request.SoftFilters == null || !request.SoftFilters.Any()))
             return events.Take(finalLimit).ToList();
 
         var today = DateTime.UtcNow;
-        return events.OrderByDescending(e =>
+
+        foreach (var ev in events)
         {
-            var daysAway = e.StartDate.HasValue ? (e.StartDate.Value - today).TotalDays : 365;
-            if (daysAway < 0) daysAway = 365;
-            double timeDecay = 1.0 / (1.0 + Math.Log10(Math.Max(1, daysAway) + 1));
-            return e.SimilarityScore * timeDecay;
-        }).Take(finalLimit).ToList();
+            double softBoost = 0;
+            
+            // Apply Soft Filters boost
+            if (request.SoftFilters?.Any() == true)
+            {
+                foreach (var filter in request.SoftFilters)
+                {
+                    if (filter.Values == null || !filter.Values.Any()) continue;
+                    
+                    var valuesLower = filter.Values.Select(v => v.ToLower()).ToList();
+                    bool matched = false;
+
+                    switch (filter.Field.ToLower())
+                    {
+                        case "mode": matched = ev.Mode != null && valuesLower.Contains(ev.Mode.ToLower()); break;
+                        case "level": matched = ev.Level != null && valuesLower.Contains(ev.Level.ToLower()); break;
+                        case "city": matched = ev.City != null && valuesLower.Contains(ev.City.ToLower()); break;
+                        case "country": matched = ev.Country != null && valuesLower.Contains(ev.Country.ToLower()); break;
+                        case "technology": matched = ev.Technologies.Any(t => valuesLower.Contains(t.ToLower())); break;
+                        case "eventtype": matched = ev.EventType != null && valuesLower.Contains(ev.EventType.ToLower()); break;
+                    }
+
+                    if (matched)
+                    {
+                        softBoost += 0.05; // Configurable boost per matched soft preference
+                    }
+                }
+            }
+
+            double timeDecay = 1.0;
+            if (enableReRanking)
+            {
+                var daysAway = ev.StartDate.HasValue ? (ev.StartDate.Value - today).TotalDays : 365;
+                if (daysAway < 0) daysAway = 365;
+                timeDecay = 1.0 / (1.0 + Math.Log10(Math.Max(1, daysAway) + 1));
+            }
+
+            ev.RankingScore = Math.Min(1.0, (ev.SimilarityScore + softBoost) * timeDecay);
+        }
+
+        return events.OrderByDescending(e => e.RankingScore).Take(finalLimit).ToList();
     }
 
     private async Task GenerateExplanationsAsync(List<RecommendedEventDto> events, Entities.User user)

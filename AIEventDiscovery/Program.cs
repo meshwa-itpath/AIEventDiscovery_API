@@ -83,6 +83,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRecommendationService, RecommendationService>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IRetrievalService, AIEventDiscovery.Services.RAG.RetrievalService>();
+builder.Services.AddScoped<IHybridSearchService, AIEventDiscovery.Services.Search.HybridSearchService>();
 
 // Generic repository — registered as an open generic so any IGenericRepository<TEntity>
 // can be injected without registering each entity separately

@@ -73,4 +73,32 @@ public static class TechnologyTaxonomy
         "Search Technologies",
         "API Development"
     };
+
+    public static readonly IReadOnlyDictionary<string, string[]> Synonyms = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["DotNet Development"] = [".NET", "DotNet", "C#", "ASP.NET", "F#", "Blazor", "Entity Framework", "EF Core"],
+        [".NET"] = [".NET", "DotNet", "C#", "ASP.NET", "F#", "Blazor", "Entity Framework", "EF Core"],
+        ["Backend Development"] = ["Backend", "Server-Side", "Server Side", "Microservices"],
+        ["Frontend Development"] = ["Frontend", "Front-end", "UI", "Web UI", "Client-Side", "React", "Angular", "Vue", "TypeScript", "JavaScript", "Next.js"],
+        ["Java Development"] = ["Java", "Spring", "SpringBoot", "Kotlin", "Quarkus"],
+        ["Python Development"] = ["Python", "Django", "FastAPI", "Flask"],
+        ["AI & Generative AI"] = ["AI", "GenAI", "Generative AI", "LLM", "GPT", "Deep Learning"],
+        ["AI Frameworks"] = ["LangChain", "Semantic Kernel", "LlamaIndex", "HuggingFace", "PyTorch", "TensorFlow"],
+        ["Machine Learning"] = ["Machine Learning", "ML", "Data Science", "Scikit"],
+        ["Data Engineering"] = ["Data Engineering", "Spark", "Kafka", "ETL", "Airflow", "Hadoop"],
+        ["Mobile Development"] = ["Mobile", "Android", "iOS", "Flutter", "React Native", "Swift"],
+        ["API Development"] = ["API", "REST", "GraphQL", "gRPC", "Web API"],
+        ["CI/CD"] = ["CI/CD", "Continuous Integration", "Continuous Deployment", "GitHub Actions", "Jenkins", "GitLab"],
+        ["DevOps & Infrastructure"] = ["DevOps", "Docker", "Kubernetes", "K8s", "Terraform", "Ansible", "Helm"],
+        ["Database Development"] = ["Database", "SQL", "PostgreSQL", "Postgres", "MySQL", "MongoDB", "Redis"],
+        ["Cloud Computing"] = ["Cloud", "AWS", "Azure", "GCP", "Serverless"],
+        ["Vector Databases"] = ["Vector", "pgvector", "Pinecone", "Milvus", "Qdrant", "Weaviate"],
+        ["Search Technologies"] = ["Search", "Elasticsearch", "OpenSearch", "Lucene", "Solr"],
+        ["Monitoring & Observability"] = ["Monitoring", "Observability", "Prometheus", "Grafana", "OpenTelemetry"]
+    };
+
+    public static string[] GetSynonyms(string technology) =>
+        !string.IsNullOrWhiteSpace(technology) && Synonyms.TryGetValue(technology.Trim(), out var terms)
+            ? terms
+            : [];
 }

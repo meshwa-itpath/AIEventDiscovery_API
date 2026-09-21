@@ -20,4 +20,6 @@ public interface IRecommendationService
         string? mode = null);
 
     Task<ApiResponse<EventDetailDto>> GetEventByIdAsync(Guid id);
+
+    Task<ApiResponse<List<RecommendedEventDto>>> GetRelatedEventsAsync(Guid eventId);
 }

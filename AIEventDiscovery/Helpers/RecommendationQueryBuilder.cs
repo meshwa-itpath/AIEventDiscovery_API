@@ -83,16 +83,21 @@ public static class RecommendationQueryBuilder
     /// </summary>
     public static string BuildAnchoredQuery(User user, string primaryTech, List<string> modifiers)
     {
+        var expandedPrimary = string.Join(" ", GetExpansionTerms(primaryTech));
+
         if (modifiers.Count == 0)
         {
-            return $"Technical events and conferences for a {user.Role} specializing in {primaryTech}. Core focus is {primaryTech}.";
+            return $"{primaryTech} {expandedPrimary} conference workshop meetup talk session " +
+                   $"for {user.Role}";
         }
 
         var modifierString = string.Join(", ", modifiers);
-        return $"Technical events and conferences for a {user.Role} specializing primarily in {primaryTech}. " +
-               $"Core topic must be {primaryTech}, with secondary interest in {modifierString}. " +
-               $"Focus on {primaryTech} development, architecture, tools, and best practices relating to {modifierString}.";
+        return $"{primaryTech} {expandedPrimary} conference workshop meetup talk session " +
+               $"for {user.Role}, touching on {modifierString}";
     }
+
+    private static string[] GetExpansionTerms(string primaryTech) =>
+        TechnologyTaxonomy.GetSynonyms(primaryTech);
 
     /// <summary>
     /// Builds a fallback semantic query when no technologies are set on the user profile.
@@ -125,7 +130,6 @@ public static class RecommendationQueryBuilder
         if (!string.IsNullOrWhiteSpace(mode))
         {
             filters.Mode = mode.Trim();
-            hasFilter = true;
         }
 
         return hasFilter ? filters : null;

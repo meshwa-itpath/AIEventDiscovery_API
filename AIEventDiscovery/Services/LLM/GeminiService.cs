@@ -111,4 +111,89 @@ public class GeminiService : IGeminiService
 
         return new Dictionary<string, string>();
     }
+    
+    public async Task<QueryUnderstandingResult> UnderstandQueryAsync(string userQuery, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            _logger.LogWarning("Gemini API Key is missing. Falling back to original query.");
+            return new QueryUnderstandingResult { MainQuery = userQuery };
+        }
+
+        if (string.IsNullOrWhiteSpace(userQuery))
+        {
+            return new QueryUnderstandingResult();
+        }
+
+        var prompt = Prompts.QueryUnderstandingPrompts.BuildPrompt(userQuery);
+
+        var requestBody = new
+        {
+            contents = new[]
+            {
+                new
+                {
+                    parts = new[]
+                    {
+                        new { text = prompt }
+                    }
+                }
+            },
+            generationConfig = new
+            {
+                response_mime_type = "application/json"
+            }
+        };
+
+        var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_options.Model}:generateContent?key={_options.ApiKey}";
+
+        try
+        {
+            var response = await _httpClient.PostAsync(url, jsonContent, cancellationToken);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
+                using var doc = JsonDocument.Parse(responseString);
+                var root = doc.RootElement;
+                
+                if (root.TryGetProperty("candidates", out var candidates) && candidates.GetArrayLength() > 0)
+                {
+                    var firstCandidate = candidates[0];
+                    if (firstCandidate.TryGetProperty("content", out var content) && content.TryGetProperty("parts", out var parts) && parts.GetArrayLength() > 0)
+                    {
+                        var textResponse = parts[0].GetProperty("text").GetString();
+                        if (!string.IsNullOrWhiteSpace(textResponse))
+                        {
+                            try
+                            {
+                                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                                var result = JsonSerializer.Deserialize<QueryUnderstandingResult>(textResponse, options);
+                                if (result != null)
+                                {
+                                    return result;
+                                }
+                            }
+                            catch (JsonException ex)
+                            {
+                                _logger.LogError(ex, "Failed to parse Gemini response as QueryUnderstandingResult: {Text}", textResponse);
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                _logger.LogError("Gemini API call failed with status code {StatusCode}: {Reason}", response.StatusCode, await response.Content.ReadAsStringAsync(cancellationToken));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while calling Gemini API for query understanding.");
+        }
+
+        // Fallback
+        return new QueryUnderstandingResult { MainQuery = userQuery };
+    }
 }

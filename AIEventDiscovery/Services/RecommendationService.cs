@@ -154,7 +154,7 @@ public class RecommendationService : IRecommendationService
             QueryFilters = queryFilters,
             Limit = poolSize,
             FinalLimit = poolSize,
-            SimilarityThreshold = 0.7,
+            SimilarityThreshold = 0.6,
             EnableReRanking = true,
             FilterExpiredEvents = true,
             EnableGeminiExplanation = false,
@@ -217,6 +217,71 @@ public class RecommendationService : IRecommendationService
         }
 
         return ApiResponse<EventDetailDto>.Ok(eventDetail, "Event details retrieved successfully.");
+    }
+
+    public async Task<ApiResponse<List<RecommendedEventDto>>> GetRelatedEventsAsync(Guid eventId)
+    {
+        if (eventId == Guid.Empty)
+        {
+            return ApiResponse<List<RecommendedEventDto>>.Fail("Invalid event ID.");
+        }
+
+        var targetEvent = await _eventRepository.GetByIdAsync<Event>(eventId);
+        if (targetEvent == null)
+        {
+            return ApiResponse<List<RecommendedEventDto>>.Fail("Target event not found.");
+        }
+
+        var terms = new List<string> { targetEvent.Title };
+        if (targetEvent.Technologies != null && targetEvent.Technologies.Any())
+        {
+            terms.AddRange(targetEvent.Technologies);
+        }
+        if (targetEvent.Tags != null && targetEvent.Tags.Any())
+        {
+            terms.AddRange(targetEvent.Tags);
+        }
+
+        var queryText = string.Join(" ", terms);
+
+        // Optional: fetch user context if we want personalized explanations or ranking
+        User? userContext = null;
+        var userId = _currentUserService.UserId;
+        if (userId != Guid.Empty)
+        {
+            userContext = await _userRepository.GetByIdAsync<User>(userId);
+        }
+
+        int finalLimit = 10;
+        int fetchLimit = finalLimit + 5; // Fetch a bit more to ensure we have enough after excluding target
+
+        var request = new RetrievalRequest
+        {
+            QueryText = queryText,
+            QueryFilters = null, // No strict metadata filters based on user feedback
+            Limit = fetchLimit,
+            FinalLimit = fetchLimit,
+            SimilarityThreshold = 0.6,
+            EnableReRanking = true,
+            FilterExpiredEvents = true,
+            EnableGeminiExplanation = false,
+            UserContext = userContext
+        };
+
+        var relatedEvents = await _retrievalService.ExecutePipelineAsync(request);
+
+        // Exclude the target event itself
+        var filteredEvents = relatedEvents
+            .Where(e => !string.Equals(e.Id, eventId.ToString(), StringComparison.OrdinalIgnoreCase))
+            .Take(finalLimit)
+            .ToList();
+
+        if (filteredEvents.Count == 0)
+        {
+            return ApiResponse<List<RecommendedEventDto>>.Ok([], "No related events found.");
+        }
+
+        return ApiResponse<List<RecommendedEventDto>>.Ok(filteredEvents, "Successfully retrieved related events.");
     }
 
     // ── Private Pipeline Helpers ─────────────────────────────────────────────────
@@ -287,7 +352,7 @@ public class RecommendationService : IRecommendationService
             ApplyWeightedRanking(clusterResults, primary, modifiers);
 
             // Re-sort within the cluster after ranking
-            clusterResults.Sort((a, b) => b.RankingScore.CompareTo(a.RankingScore));
+            //clusterResults.Sort((a, b) => b.RankingScore.CompareTo(a.RankingScore));
             clusterBuckets[primary] = clusterResults;
         }
 
@@ -361,7 +426,7 @@ public class RecommendationService : IRecommendationService
         }
 
         // Final global sort by ranking score — highest quality events rise to the top
-        roundRobinPool.Sort((a, b) => b.RankingScore.CompareTo(a.RankingScore));
+        //roundRobinPool.Sort((a, b) => b.RankingScore.CompareTo(a.RankingScore));
         return roundRobinPool;
     }
 
@@ -420,34 +485,11 @@ public class RecommendationService : IRecommendationService
         }
     }
 
-    private static readonly Dictionary<string, string[]> TechnologySynonyms = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["DotNet Development"] = [".NET", "DotNet", "C#", "ASP.NET", "F#", "Blazor", "Entity Framework", "EF Core"],
-        [".NET"] = [".NET", "DotNet", "C#", "ASP.NET", "F#", "Blazor", "Entity Framework", "EF Core"],
-        ["Backend Development"] = ["Backend", "Server-Side", "Server Side", "Microservices"],
-        ["Frontend Development"] = ["Frontend", "Front-end", "UI", "Web UI", "Client-Side", "React", "Angular", "Vue", "TypeScript", "JavaScript", "Next.js"],
-        ["Java Development"] = ["Java", "Spring", "SpringBoot", "Kotlin", "Quarkus"],
-        ["Python Development"] = ["Python", "Django", "FastAPI", "Flask"],
-        ["AI & Generative AI"] = ["AI", "GenAI", "Generative AI", "LLM", "GPT", "Deep Learning"],
-        ["AI Frameworks"] = ["LangChain", "Semantic Kernel", "LlamaIndex", "HuggingFace", "PyTorch", "TensorFlow"],
-        ["Machine Learning"] = ["Machine Learning", "ML", "Data Science", "Scikit"],
-        ["Data Engineering"] = ["Data Engineering", "Spark", "Kafka", "ETL", "Airflow", "Hadoop"],
-        ["Mobile Development"] = ["Mobile", "Android", "iOS", "Flutter", "React Native", "Swift"],
-        ["API Development"] = ["API", "REST", "GraphQL", "gRPC", "Web API"],
-        ["CI/CD"] = ["CI/CD", "Continuous Integration", "Continuous Deployment", "GitHub Actions", "Jenkins", "GitLab"],
-        ["DevOps & Infrastructure"] = ["DevOps", "Docker", "Kubernetes", "K8s", "Terraform", "Ansible", "Helm"],
-        ["Database Development"] = ["Database", "SQL", "PostgreSQL", "Postgres", "MySQL", "MongoDB", "Redis"],
-        ["Cloud Computing"] = ["Cloud", "AWS", "Azure", "GCP", "Serverless"],
-        ["Vector Databases"] = ["Vector", "pgvector", "Pinecone", "Milvus", "Qdrant", "Weaviate"],
-        ["Search Technologies"] = ["Search", "Elasticsearch", "OpenSearch", "Lucene", "Solr"],
-        ["Monitoring & Observability"] = ["Monitoring", "Observability", "Prometheus", "Grafana", "OpenTelemetry"]
-    };
-
     private static bool MatchesTechnology(RecommendedEventDto ev, string technology)
     {
         if (string.IsNullOrWhiteSpace(technology)) return false;
 
-        var tokens = TechnologySynonyms.TryGetValue(technology.Trim(), out var synonyms)
+        var tokens = TechnologyTaxonomy.Synonyms.TryGetValue(technology.Trim(), out var synonyms)
             ? synonyms
             : [technology.Trim()];
 

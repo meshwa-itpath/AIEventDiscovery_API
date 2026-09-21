@@ -11,10 +11,12 @@ namespace AIEventDiscovery.Controllers;
 public class EventsController : ControllerBase
 {
     private readonly IRecommendationService _recommendationService;
+    private readonly IHybridSearchService _hybridSearchService;
 
-    public EventsController(IRecommendationService recommendationService)
+    public EventsController(IRecommendationService recommendationService, IHybridSearchService hybridSearchService)
     {
         _recommendationService = recommendationService;
+        _hybridSearchService = hybridSearchService;
     }
 
     /// <summary>
@@ -59,7 +61,7 @@ public class EventsController : ControllerBase
             return BadRequest(ApiResponse<object>.Fail("Search query cannot be empty."));
         }
 
-        var result = await _recommendationService.SearchEventsAsync(query, page, pageSize, level, mode);
+        var result = await _hybridSearchService.SearchEventsAsync(query, pageSize);
         if (!result.Success)
         {
             return BadRequest(result);
@@ -76,6 +78,22 @@ public class EventsController : ControllerBase
     public async Task<IActionResult> GetEventById([FromRoute] Guid id)
     {
         var result = await _recommendationService.GetEventByIdAsync(id);
+        if (!result.Success)
+        {
+            return NotFound(result);
+        }
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Retrieves up to 10 events related to the given event ID.
+    /// </summary>
+    [HttpGet("{id:guid}/related")]
+    [ProducesResponseType(typeof(ApiResponse<List<RecommendedEventDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetRelatedEvents([FromRoute] Guid id)
+    {
+        var result = await _recommendationService.GetRelatedEventsAsync(id);
         if (!result.Success)
         {
             return NotFound(result);

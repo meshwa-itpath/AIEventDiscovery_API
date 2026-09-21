@@ -13,4 +13,5 @@ public class RetrievalRequest
     public bool FilterExpiredEvents { get; set; } = false;
     public bool EnableGeminiExplanation { get; set; } = false;
     public User? UserContext { get; set; }
+    public List<MetadataFilterItem>? SoftFilters { get; set; }
 }
