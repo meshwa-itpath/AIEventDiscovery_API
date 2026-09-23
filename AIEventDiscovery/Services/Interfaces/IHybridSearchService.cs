@@ -4,5 +4,5 @@ namespace AIEventDiscovery.Services.Interfaces;
 
 public interface IHybridSearchService
 {
-    Task<ApiResponse<List<RecommendedEventDto>>> SearchEventsAsync(string query, int limit = 10, CancellationToken cancellationToken = default);
+    Task<ApiResponse<List<RecommendedEventDto>>> SearchEventsAsync(string query, int page = 1, int pageSize = 10, CancellationToken cancellationToken = default);
 }

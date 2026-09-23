@@ -61,7 +61,7 @@ public class EventsController : ControllerBase
             return BadRequest(ApiResponse<object>.Fail("Search query cannot be empty."));
         }
 
-        var result = await _hybridSearchService.SearchEventsAsync(query, pageSize);
+        var result = await _hybridSearchService.SearchEventsAsync(query, page, pageSize);
         if (!result.Success)
         {
             return BadRequest(result);

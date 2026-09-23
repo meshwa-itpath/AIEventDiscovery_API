@@ -42,7 +42,7 @@ public class RetrievalService : IRetrievalService
         var uniqueEvents = currentEvents.GroupBy(e => e.Id).Select(g => g.First()).ToList();
 
         // 6. Re-ranking (based on Date + Score + SoftFilters)
-        var rankedEvents = ReRankEvents(uniqueEvents, request, request.EnableReRanking, request.FinalLimit);
+        var rankedEvents = ReRankEvents(uniqueEvents, request, request.EnableReRanking);
 
         // 7. Gemini Explanation Generation
         if (request.EnableGeminiExplanation && request.UserContext != null)
@@ -104,10 +104,10 @@ public class RetrievalService : IRetrievalService
         return events.Where(e => e.StartDate == null || e.StartDate >= today).ToList();
     }
 
-    private static List<RecommendedEventDto> ReRankEvents(List<RecommendedEventDto> events, RetrievalRequest request, bool enableReRanking, int finalLimit)
+    private static List<RecommendedEventDto> ReRankEvents(List<RecommendedEventDto> events, RetrievalRequest request, bool enableReRanking)
     {
         if (!enableReRanking && (request.SoftFilters == null || !request.SoftFilters.Any()))
-            return events.Take(finalLimit).ToList();
+            return events.ToList();
 
         var today = DateTime.UtcNow;
 
@@ -153,7 +153,7 @@ public class RetrievalService : IRetrievalService
             ev.RankingScore = Math.Min(1.0, (ev.SimilarityScore + softBoost) * timeDecay);
         }
 
-        return events.OrderByDescending(e => e.RankingScore).Take(finalLimit).ToList();
+        return events.OrderByDescending(e => e.RankingScore).ToList();
     }
 
     private async Task GenerateExplanationsAsync(List<RecommendedEventDto> events, Entities.User user)

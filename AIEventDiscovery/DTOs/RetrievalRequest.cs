@@ -7,7 +7,6 @@ public class RetrievalRequest
     public string QueryText { get; set; } = string.Empty;
     public EventQueryFilters? QueryFilters { get; set; }
     public int Limit { get; set; } = 20;
-    public int FinalLimit { get; set; } = 10;
     public double SimilarityThreshold { get; set; } = 0.7;
     public bool EnableReRanking { get; set; } = false;
     public bool FilterExpiredEvents { get; set; } = false;

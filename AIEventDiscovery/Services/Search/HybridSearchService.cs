@@ -14,7 +14,7 @@ public class HybridSearchService : IHybridSearchService
         _retrievalService = retrievalService;
     }
 
-    public async Task<ApiResponse<List<RecommendedEventDto>>> SearchEventsAsync(string query, int limit = 10, CancellationToken cancellationToken = default)
+    public async Task<ApiResponse<List<RecommendedEventDto>>> SearchEventsAsync(string query, int page = 1, int pageSize = 10, CancellationToken cancellationToken = default)
     {
         // 1. Understand Query using Gemini
         var understanding = await _geminiService.UnderstandQueryAsync(query, cancellationToken);
@@ -53,8 +53,7 @@ public class HybridSearchService : IHybridSearchService
             QueryText = mainQuery,
             QueryFilters = eventQueryFilters,
             SoftFilters = softFilters,
-            Limit = limit * 2, // Fetch more candidates for re-ranking
-            FinalLimit = limit,
+            Limit = (page * pageSize) * 2, // Fetch enough candidates for re-ranking
             SimilarityThreshold = 0.5, // slightly lower threshold to allow soft boost to bring up relevant ones
             EnableReRanking = true,
             FilterExpiredEvents = true
@@ -63,14 +62,17 @@ public class HybridSearchService : IHybridSearchService
         // 5. Execute retrieval pipeline
         var results = await _retrievalService.ExecutePipelineAsync(retrievalRequest);
 
-        if (results.Count == 0)
+        var totalRecords = results.Count;
+        var pagedResults = results.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        if (pagedResults.Count == 0)
             return ApiResponse<List<RecommendedEventDto>>.Fail("No events found matching your search. Try a different query.");
 
         return ApiResponse<List<RecommendedEventDto>>.Paginated(
-            results,
-            totalRecords: results.Count,
-            page: 1,
-            pageSize: limit,
-            message: $"Found {results.Count} events matching your search.");
+            pagedResults,
+            totalRecords: totalRecords,
+            page: page,
+            pageSize: pageSize,
+            message: $"Found {totalRecords} events matching your search.");
     }
 }
