@@ -1,10 +1,8 @@
 using AIEventDiscovery.DTOs;
-using AIEventDiscovery.Entities;
 
 namespace AIEventDiscovery.Services.Interfaces;
 
-public interface IGeminiService
+public interface IExtractMetadataFromQueryService
 {
-    Task<Dictionary<string, string>> GenerateBatchExplanationsAsync(User user, List<RecommendedEventDto> events);
     Task<QueryUnderstandingResult> ExtractMetadataFromUserQuery(string userQuery, CancellationToken cancellationToken = default);
 }

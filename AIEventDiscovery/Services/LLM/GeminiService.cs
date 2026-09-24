@@ -112,17 +112,17 @@ public class GeminiService : IGeminiService
         return new Dictionary<string, string>();
     }
     
-    public async Task<QueryUnderstandingResult> UnderstandQueryAsync(string userQuery, CancellationToken cancellationToken = default)
+    public async Task<QueryUnderstandingResult> ExtractMetadataFromUserQuery(string userQuery, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
             _logger.LogWarning("Gemini API Key is missing. Falling back to original query.");
-            return new QueryUnderstandingResult { MainQuery = userQuery };
+            return new QueryUnderstandingResult { MainQuery = userQuery, IsSuccess = false };
         }
 
         if (string.IsNullOrWhiteSpace(userQuery))
         {
-            return new QueryUnderstandingResult();
+            return new QueryUnderstandingResult { IsSuccess = false };
         }
 
         var prompt = Prompts.QueryUnderstandingPrompts.BuildPrompt(userQuery);
@@ -194,6 +194,6 @@ public class GeminiService : IGeminiService
         }
 
         // Fallback
-        return new QueryUnderstandingResult { MainQuery = userQuery };
+        return new QueryUnderstandingResult { MainQuery = userQuery, IsSuccess = false };
     }
 }

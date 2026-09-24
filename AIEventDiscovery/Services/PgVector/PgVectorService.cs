@@ -43,25 +43,33 @@ public class PgVectorService : IPgVectorService
 
         // Start with base query, excluding soft-deleted rows
         var query = _db.Events
-            .Where(e => !e.IsDeleted)
-            .AsQueryable();
+            .AsNoTracking()
+            .Where(e => !e.IsDeleted);
 
-        // Apply optional server-side pre-filters before the ANN scan
+        //Apply optional server - side pre - filters before the ANN scan
         if (filters != null)
         {
             query = ApplyFilters(query, filters);
         }
 
         // Order by cosine distance (ascending = most similar first) and take top N
-        var rawResults = await query
+        var vectorQuery = query
+            .OrderBy(e => e.Embedding!.CosineDistance(queryVector))
+            .Take(limit)
             .Select(e => new
             {
                 Event = e,
                 Distance = e.Embedding!.CosineDistance(queryVector)
-            })
-            .OrderBy(x => x.Distance)
-            .Take(limit)
-            .ToListAsync();
+            });
+
+        //var sql = vectorQuery.ToQueryString();
+
+        //_logger.LogInformation("PGVECTOR SQL:\n{Sql}", sql);
+
+        //// Executes exactly once
+        var rawResults = await vectorQuery.ToListAsync();
+
+        //_logger.LogInformation("Retrieved {Count} events", rawResults.Count);
 
         // Convert cosine distance → similarity score (0–1, 1 = identical)
         return rawResults
@@ -73,66 +81,67 @@ public class PgVectorService : IPgVectorService
     {
         if (filters.Categories?.Any() == true)
         {
-            var targets = filters.Categories.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToList();
+            var targets = filters.Categories.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToArray();
             if (targets.Any())
                 query = query.Where(e => e.Category != null && targets.Contains(e.Category));
         }
 
         if (filters.SubCategories?.Any() == true)
         {
-            var targets = filters.SubCategories.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToList();
+            var targets = filters.SubCategories.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToArray();
             if (targets.Any())
                 query = query.Where(e => e.SubCategory != null && targets.Contains(e.SubCategory));
         }
 
         if (filters.Cities?.Any() == true)
         {
-            var targets = filters.Cities.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToList();
+            var targets = filters.Cities.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToArray();
             if (targets.Any())
                 query = query.Where(e => e.City != null && targets.Contains(e.City));
         }
 
         if (filters.Countries?.Any() == true)
         {
-            var targets = filters.Countries.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToList();
+            var targets = filters.Countries.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToArray();
             if (targets.Any())
                 query = query.Where(e => e.Country != null && targets.Contains(e.Country));
         }
 
         if (filters.Venues?.Any() == true)
         {
-            var targets = filters.Venues.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToList();
+            var targets = filters.Venues.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToArray();
             if (targets.Any())
                 query = query.Where(e => e.Venue != null && targets.Contains(e.Venue));
         }
 
         if (filters.Modes?.Any() == true)
         {
-            var targets = filters.Modes.Where(m => !string.IsNullOrWhiteSpace(m)).Select(m => m.Trim()).ToList();
+            var targets = filters.Modes.Where(m => !string.IsNullOrWhiteSpace(m)).Select(m => m.Trim()).ToArray();
             if (targets.Any())
                 query = query.Where(e => e.Mode != null && targets.Contains(e.Mode));
         }
 
         if (filters.Levels?.Any() == true)
         {
-            var targets = filters.Levels.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l.Trim()).ToList();
-            targets.Add("All Levels");
-            targets.Add("All");
+            var targetsList = filters.Levels.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l.Trim()).ToList();
+            targetsList.Add("All Levels");
+            targetsList.Add("All");
 
+            var targets = targetsList.ToArray();
             if (targets.Any())
                 query = query.Where(e => e.Level != null && targets.Contains(e.Level));
         }
 
         if (filters.EventTypes?.Any() == true)
         {
-            var targets = filters.EventTypes.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).ToList();
+            var targets = filters.EventTypes.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).ToArray();
             if (targets.Any())
                 query = query.Where(e => e.EventType != null && targets.Contains(e.EventType));
         }
 
         if (filters.Organizers?.Any() == true)
         {
-            var targets = filters.Organizers.Where(o => !string.IsNullOrWhiteSpace(o)).Select(o => o.Trim()).ToList();
+            var targets = filters.Organizers.Where(o => !string.IsNullOrWhiteSpace(o)).Select(o => o.Trim()).ToArray();
             if (targets.Any())
                 query = query.Where(e => e.Organizer != null && targets.Contains(e.Organizer));
         }

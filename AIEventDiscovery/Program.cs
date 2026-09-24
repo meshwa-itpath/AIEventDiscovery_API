@@ -1,11 +1,16 @@
 using System.Text;
+using AIEventDiscovery.Configuration;
+using AIEventDiscovery.Data;
 using AIEventDiscovery.Data.Repositories;
 using AIEventDiscovery.Middleware;
 using AIEventDiscovery.Services;
 using AIEventDiscovery.Services.DataImport;
 using AIEventDiscovery.Services.Embeddings;
 using AIEventDiscovery.Services.Interfaces;
+using AIEventDiscovery.Services.LLM;
 using AIEventDiscovery.Services.PgVector;
+using AIEventDiscovery.Services.RAG;
+using AIEventDiscovery.Services.Search;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -43,38 +48,20 @@ builder.Services.AddSwaggerGen(options =>
         In           = ParameterLocation.Header,
         Description  = "Enter your JWT token below. Example: eyJhbGci..."
     });
-
-    // Apply the scheme globally so every endpoint shows the lock icon
-    //options.AddSecurityRequirement(new OpenApiSecurityRequirement
-    //{
-    //    {
-    //        new OpenApiSecurityScheme
-    //        {
-    //            Reference = new OpenApiReference
-    //            {
-    //                Type = ReferenceType.SecurityScheme,
-    //                Id   = "Bearer"
-    //            }
-    //        },
-    //        Array.Empty<string>()
-    //    }
-    //});
 });
 
 // PostgreSQL via EF Core with pgvector support
-builder.Services.AddDbContext<AIEventDiscovery.Data.ApplicationDbContext>(options =>
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection"),
         npgsql => npgsql.UseVector()));
 
-// pgvector service — replaces ChromaDB
-builder.Services.AddScoped<IPgVectorService, PgVectorService>();
+builder.Services.AddHttpClient<IGeminiService, GeminiService>();
+builder.Services.AddHttpClient<IGroqService, GroqService>();
 
-// Gemini HTTP client
-builder.Services.AddHttpClient<IGeminiService, AIEventDiscovery.Services.LLM.GeminiService>();
-
-// Local embedding model (ONNX, loaded once at startup as a singleton)
 builder.Services.AddSingleton<IEmbeddingService, LocalEmbeddingService>();
+builder.Services.AddScoped<IPgVectorService, PgVectorService>();
+builder.Services.AddScoped<IExtractMetadataFromQueryService, ExtractMetadataFromQueryService>();
 
 // Data import and authentication services
 builder.Services.AddScoped<IDataImportService, DataImportService>();
@@ -82,15 +69,15 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRecommendationService, RecommendationService>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
-builder.Services.AddScoped<IRetrievalService, AIEventDiscovery.Services.RAG.RetrievalService>();
-builder.Services.AddScoped<IHybridSearchService, AIEventDiscovery.Services.Search.HybridSearchService>();
+builder.Services.AddScoped<IRetrievalService, RetrievalService>();
+builder.Services.AddScoped<IHybridSearchService, HybridSearchService>();
 
 // Generic repository — registered as an open generic so any IGenericRepository<TEntity>
 // can be injected without registering each entity separately
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
 // Options binding
-builder.Services.Configure<AIEventDiscovery.Configuration.GeminiOptions>(builder.Configuration.GetSection("Gemini"));
+builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 
 // ──────────────────────────────────────────────────────────────────
 // JWT Authentication

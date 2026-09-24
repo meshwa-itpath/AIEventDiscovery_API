@@ -11,6 +11,7 @@ public enum MetadataFilterType
 
 public class QueryUnderstandingResult
 {
+    public bool IsSuccess { get; set; } = true;
     public string MainQuery { get; set; } = string.Empty;
     public List<MetadataFilterItem> Metadata { get; set; } = new();
 }

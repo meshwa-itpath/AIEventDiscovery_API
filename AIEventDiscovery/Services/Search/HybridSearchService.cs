@@ -5,19 +5,19 @@ namespace AIEventDiscovery.Services.Search;
 
 public class HybridSearchService : IHybridSearchService
 {
-    private readonly IGeminiService _geminiService;
+    private readonly IExtractMetadataFromQueryService _extractMetadataService;
     private readonly IRetrievalService _retrievalService;
 
-    public HybridSearchService(IGeminiService geminiService, IRetrievalService retrievalService)
+    public HybridSearchService(IExtractMetadataFromQueryService extractMetadataService, IRetrievalService retrievalService)
     {
-        _geminiService = geminiService;
+        _extractMetadataService = extractMetadataService;
         _retrievalService = retrievalService;
     }
 
     public async Task<ApiResponse<List<RecommendedEventDto>>> SearchEventsAsync(string query, int page = 1, int pageSize = 10, CancellationToken cancellationToken = default)
     {
-        // 1. Understand Query using Gemini
-        var understanding = await _geminiService.UnderstandQueryAsync(query, cancellationToken);
+        // 1. Understand Query using ExtractMetadataService (Gemini with Groq Fallback)
+        var understanding = await _extractMetadataService.ExtractMetadataFromUserQuery(query, cancellationToken);
         var mainQuery = string.IsNullOrWhiteSpace(understanding.MainQuery) ? query : understanding.MainQuery;
 
         // 2. Separate Hard and Soft filters
@@ -53,7 +53,7 @@ public class HybridSearchService : IHybridSearchService
             QueryText = mainQuery,
             QueryFilters = eventQueryFilters,
             SoftFilters = softFilters,
-            Limit = (page * pageSize) * 2, // Fetch enough candidates for re-ranking
+            Limit = (page * pageSize) * 3, // Fetch enough candidates for re-ranking
             SimilarityThreshold = 0.5, // slightly lower threshold to allow soft boost to bring up relevant ones
             EnableReRanking = true,
             FilterExpiredEvents = true
